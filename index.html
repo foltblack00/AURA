@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AURA - Személyes AI Asszisztens</title>
-    <!-- Puter AI SDK betöltése -->
     <script src="https://js.puter.com/v2/"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -118,11 +117,11 @@
 
     <div class="visualizer-container">
         <div class="aura-orb" id="orb"></div>
-        <div class="status-text" id="status">Kattints egyszer a gömbre az indításhoz...</div>
+        <div class="status-text" id="status">Kattints a gömbre az indításhoz...</div>
     </div>
 
     <div class="chat-container" id="chat">
-        <div class="message aura">AURA: Rendszer online. Kattints a gömbre az indításhoz!</div>
+        <div class="message aura">AURA: Online vagyok. Kattints a gömbre!</div>
     </div>
 
     <div class="modal" id="settingsModal">
@@ -159,6 +158,7 @@
         let synth = window.speechSynthesis;
         let voices = [];
         let isSessionActive = false;
+        let isAuraSpeaking = false; // Saját független állapotjelző a beragadás elkerülésére
 
         if (localStorage.getItem('aura_pitch')) pitchRange.value = localStorage.getItem('aura_pitch');
         if (localStorage.getItem('aura_rate')) rateRange.value = localStorage.getItem('aura_rate');
@@ -182,13 +182,11 @@
         const BASE_PROMPT = `Te vagy AURA, egy rendkívül intelligens, közvetlen, emberi hangnemben beszélő AI asszisztens, akit a felhasználó tervezett. 
 Vezérelv: Beszélj roppant tömören, természetesen, mint egy hús-vér partner (legfeljebb 1 mondatban, ritkán 2-ben). Soha ne hadoválj, ne legyél robotikus, ne mondj felesleges tiszteletköri panelt. Térj a lényegre!`;
 
-        function restartRecognition() {
-            if (isSessionActive && !orb.classList.contains('thinking') && !orb.classList.contains('speaking')) {
+        function startListening() {
+            if (isSessionActive && !isAuraSpeaking && !orb.classList.contains('thinking')) {
                 try {
                     recognition.start();
-                } catch(e) {
-                    // Ha már fut, ignoráljuk
-                }
+                } catch(e) {}
             }
         }
 
@@ -200,8 +198,10 @@ Vezérelv: Beszélj roppant tömören, természetesen, mint egy hús-vér partne
             recognition.interimResults = false;
 
             recognition.onstart = () => {
-                orb.className = 'aura-orb listening';
-                statusText.innerText = 'AURA hallgat...';
+                if (!isAuraSpeaking) {
+                    orb.className = 'aura-orb listening';
+                    statusText.innerText = 'AURA hallgat...';
+                }
             };
 
             recognition.onresult = (event) => {
@@ -212,18 +212,16 @@ Vezérelv: Beszélj roppant tömören, természetesen, mint egy hús-vér partne
                 askRealAI(text);
             };
 
-            recognition.onerror = (event) => {
-                if (isSessionActive) {
-                    setTimeout(restartRecognition, 400);
-                }
+            recognition.onerror = () => {
+                if (isSessionActive) setTimeout(startListening, 400);
             };
 
             recognition.onend = () => {
-                if (isSessionActive && !orb.classList.contains('thinking') && !orb.classList.contains('speaking')) {
-                    setTimeout(restartRecognition, 300);
+                if (isSessionActive && !isAuraSpeaking && !orb.classList.contains('thinking')) {
+                    setTimeout(startListening, 300);
                 } else if (!isSessionActive) {
                     orb.className = 'aura-orb';
-                    statusText.innerText = 'Kattints egyszer a gömbre az indításhoz...';
+                    statusText.innerText = 'Kattints a gömbre az indításhoz...';
                 }
             };
         } else {
@@ -272,21 +270,17 @@ Vezérelv: Beszélj roppant tömören, természetesen, mint egy hús-vér partne
             localStorage.setItem('aura_rate', rateRange.value);
         };
 
-        // GOMBNYOMÁS: Kényszerített teljes reset és feloldás
+        // KÉNYSZERÍTETT VÉSZRESET GOMBNYOMÁSKOR
         orb.addEventListener('click', () => {
             if (!recognition) return;
             isSessionActive = true;
+            isAuraSpeaking = false; // Erőszakkal feloldjuk a beragadt beszédet
             
-            // Erőszakosan törlünk minden beragadt beszédet a böngészőből
-            try {
-                synth.cancel();
-            } catch(e) {}
+            try { synth.cancel(); } catch(e) {}
 
-            // Biztonsági reset: ha a vizuális elem beragadt volna, most kézzel visszaváltjuk
             orb.className = 'aura-orb listening';
             statusText.innerText = 'AURA hallgat...';
-
-            restartRecognition();
+            startListening();
         });
 
         async function askRealAI(userText) {
@@ -342,7 +336,7 @@ Vezérelv: Beszélj roppant tömören, természetesen, mint egy hús-vér partne
                 const match = responseText.match(/\[OPEN:\s*(.*?)\]/);
                 if (match) {
                     urlToOpen = match[1].trim();
-                    responseText =responseText.replace(match[0], '').trim();
+                    responseText = responseText.replace(match[0], '').trim();
                 }
 
                 speak(responseText, urlToOpen);
@@ -354,7 +348,8 @@ Vezérelv: Beszélj roppant tömören, természetesen, mint egy hús-vér partne
 
         function speak(text, urlToOpen = null) {
             try { synth.cancel(); } catch(e) {}
-            
+
+            isAuraSpeaking = true; // Jelöljük, hogy most ő beszél
             orb.className = 'aura-orb speaking';
             statusText.innerText = 'AURA beszél...';
 
@@ -367,36 +362,42 @@ Vezérelv: Beszélj roppant tömören, természetesen, mint egy hús-vér partne
             const selectedVoice = voices.find(v => v.name === selectedVoiceName);
             if (selectedVoice) utterance.voice = selectedVoice;
 
-            // Kényszerített biztonsági időzítő (ha a böngésző nem küldene onend eseményt)
-            let safetyTimer = setTimeout(() => {
-                if (orb.classList.contains('speaking')) {
-                    addMessage('AURA', text, 'aura');
-                    if (urlToOpen) window.open(urlToOpen, '_blank');
-                    orb.className = 'aura-orb listening';
-                    statusText.innerText = 'AURA hallgat...';
-                    if (isSessionActive) restartRecognition();
+            // Biztonsági időzítő: ha a böngésző beragadna, 7 másodperc után kényszerítve feloldjuk
+            let safety = setTimeout(() => {
+                if (isAuraSpeaking) {
+                    finishSpeech(text, urlToOpen);
                 }
-            }, 6000);
+            }, 7000);
 
             utterance.onend = () => {
-                clearTimeout(safetyTimer);
-                addMessage('AURA', text, 'aura');
-
-                if (urlToOpen) {
-                    window.open(urlToOpen, '_blank');
-                }
-
-                if (isSessionActive) {
-                    setTimeout(restartRecognition, 300);
-                }
+                clearTimeout(safety);
+                finishSpeech(text, urlToOpen);
             };
 
             utterance.onerror = () => {
-                clearTimeout(safetyTimer);
-                if (isSessionActive) restartRecognition();
+                clearTimeout(safety);
+                finishSpeech(text, urlToOpen);
             };
 
             synth.speak(utterance);
+        }
+
+        function finishSpeech(text, urlToOpen) {
+            if (!isAuraSpeaking) többet_ne = true; // Védelem többszörös lefutás ellen
+            isAuraSpeaking = false;
+            
+            addMessage('AURA', text, 'aura');
+
+            if (urlToOpen) {
+                window.open(urlToOpen, '_blank');
+            }
+
+            if (isSessionActive) {
+                setTimeout(startListening, 300);
+            } else {
+                orb.className = 'aura-orb';
+                statusText.innerText = 'Kattints a gömbre az indításhoz...';
+            }
         }
 
         function addMessage(sender, text, type) {
