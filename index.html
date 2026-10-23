@@ -117,11 +117,11 @@
 
     <div class="visualizer-container">
         <div class="aura-orb" id="orb"></div>
-        <div class="status-text" id="status">Kattints a gömbre a beszélgetéshez...</div>
+        <div class="status-text" id="status">Kattints egyszer a gömbre az indításhoz...</div>
     </div>
 
     <div class="chat-container" id="chat">
-        <div class="message aura">AURA: Online vagyok. Kattints a gömbre, ha mondani szeretnél valamit!</div>
+        <div class="message aura">AURA: Rendszer online. Kattints egyszer a gömbre, és utána folyamatosan figyelni foglak!</div>
     </div>
 
     <div class="modal" id="settingsModal">
@@ -157,6 +157,8 @@
         let recognition = null;
         let synth = window.speechSynthesis;
         let voices = [];
+        let isSessionActive = false;
+        let isSpeaking = false;
 
         if (localStorage.getItem('aura_pitch')) pitchRange.value = localStorage.getItem('aura_pitch');
         if (localStorage.getItem('aura_rate')) rateRange.value = localStorage.getItem('aura_rate');
@@ -177,7 +179,17 @@
             localStorage.setItem('aura_reminders', JSON.stringify(reminders));
         }, 30000);
 
-        const BASE_PROMPT = `Te vagy AURA, egy intelligens, közvetlen, emberi hangnemben beszélj. Legfeljebb 1-2 mondatban válaszolj, tömören és lényegretörően.`;
+        const BASE_PROMPT = `Te vagy AURA, egy intelligens, közvetlen, emberi hangnemben beszélő AI asszisztens. 
+Vezérelv: Beszélj roppant tömören, természetesen (legfeljebb 1-2 mondatban). Térj a lényegre, ne hadoválj.`;
+
+        function safeStartListening() {
+            if (!isSessionActive || isSpeaking || orb.classList.contains('thinking')) return;
+            try {
+                recognition.start();
+            } catch (e) {
+                // Ha már szalad, ne dobjon hibát
+            }
+        }
 
         if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -187,11 +199,14 @@
             recognition.interimResults = false;
 
             recognition.onstart = () => {
-                orb.className = 'aura-orb listening';
-                statusText.innerText = 'AURA hallgat... Beszélj most!';
+                if (!isSpeaking) {
+                    orb.className = 'aura-orb listening';
+                    statusText.innerText = 'AURA hallgat... Beszélj folyamatosan!';
+                }
             };
 
             recognition.onresult = (event) => {
+                if (isSpeaking) return;
                 const text = event.results[0][0].transcript.trim();
                 if (!text || text.length < 2) return;
 
@@ -199,16 +214,19 @@
                 askRealAI(text);
             };
 
-            recognition.onerror = (event) => {
-                console.log('Felismerési hiba:', event.error);
-                orb.className = 'aura-orb';
-                statusText.innerText = 'Kattints a gömbre a beszélgetéshez...';
+            recognition.onerror = () => {
+                if (isSessionActive && !isSpeaking) {
+                    setTimeout(safeStartListening, 400);
+                }
             };
 
             recognition.onend = () => {
-                if (!orb.classList.contains('thinking') && !orb.classList.contains('speaking')) {
+                // Ha aktív a munkamenet és nem beszél az AI, kattintás NÉLKÜL azonnal figyel tovább!
+                if (isSessionActive && !isSpeaking && !orb.classList.contains('thinking')) {
+                    setTimeout(safeStartListening, 300);
+                } else if (!isSessionActive) {
                     orb.className = 'aura-orb';
-                    statusText.innerText = 'Kattints a gömbre a beszélgetéshez...';
+                    statusText.innerText = 'Kattints egyszer a gömbre az indításhoz...';
                 }
             };
         } else {
@@ -257,16 +275,17 @@
             localStorage.setItem('aura_rate', rateRange.value);
         };
 
-        // EGYSZERŰ ÉS BIZTOS GOMBNYOMÁS
+        // KATTINTS EGYSCER AZ ELEJÉN, ÉS INDUL A FOLYAMATOS MÓD!
         orb.addEventListener('click', () => {
             if (!recognition) return;
+            isSessionActive = true;
+            isSpeaking = false;
+            
             if (synth.speaking) synth.cancel();
 
-            try {
-                recognition.start();
-            } catch(e) {
-                console.log("Már fut a felismerő");
-            }
+            orb.className = 'aura-orb listening';
+            statusText.innerText = 'AURA hallgat...';
+            safeStartListening();
         });
 
         async function askRealAI(userText) {
@@ -334,6 +353,11 @@
 
         function speak(text, urlToOpen = null) {
             synth.cancel();
+            
+            // Lekapcsoljuk a mikrofont a beszéd idejére, hogy ne hallja meg önmagát!
+            try { recognition.stop(); } catch(e) {}
+
+            isSpeaking = true;
             orb.className = 'aura-orb speaking';
             statusText.innerText = 'AURA beszél...';
 
@@ -346,16 +370,23 @@
             const selectedVoice = voices.find(v => v.name === selectedVoiceName);
             if (selectedVoice) utterance.voice = selectedVoice;
 
-            utterance.onend = () => {
+            const onFinish = () => {
                 addMessage('AURA', text, 'aura');
 
                 if (urlToOpen) {
                     window.open(urlToOpen, '_blank');
                 }
 
-                orb.className = 'aura-orb';
-                statusText.innerText = 'Kattints a gömbre a beszélgetéshez...';
+                isSpeaking = false;
+
+                // VÁRUNK 700 millimásodpercet, hogy a hangszóró szobai visszhangja lecsengjen, és csak utána kapcsoljuk vissza a mikrofont!
+                if (isSessionActive) {
+                    setTimeout(safeStartListening, 700);
+                }
             };
+
+            utterance.onend = onFinish;
+            utterance.onerror = onFinish;
 
             synth.speak(utterance);
         }
@@ -369,6 +400,7 @@
         }
 
         openSettings.onclick = () => modal.style.display = 'flex';
+        closeSettings.onclick = () => modal.style.display = 'none';
         window.onclick = (e) => { if (e.target === modal) modal.style.display = 'none'; };
     </script>
 </body>
