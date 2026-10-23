@@ -111,7 +111,7 @@
 
     <header>
         <div class="logo">AURA</div>
-        <button class="settings-btn" id="openSettings">Beállítások & API Kulcs</button>
+        <button class="settings-btn" id="openSettings">Hang Beállítások</button>
     </header>
 
     <div class="visualizer-container">
@@ -120,18 +120,14 @@
     </div>
 
     <div class="chat-container" id="chat">
-        <div class="message aura">AURA: Üdvözlöm! Rendszer online.</div>
+        <div class="message aura">AURA: Groq rendszer online. Készen állok!</div>
     </div>
 
     <div class="modal" id="settingsModal">
         <div class="modal-content">
-            <h3>Rendszerbeállítások</h3>
+            <h3>Hangbeállítások</h3>
             <div class="form-group">
-                <label for="apiKeyInput">Gemini API Kulcs (AIzaSy...):</label>
-                <input type="password" id="apiKeyInput" placeholder="Illeszd be a kulcsot">
-            </div>
-            <div class="form-group">
-                <label for="voiceSelect">Hang kiválasztása:</label>
+                <label for="voiceSelect">Női Hang kiválasztása:</label>
                 <select id="voiceSelect"></select>
             </div>
             <div class="form-group">
@@ -142,11 +138,13 @@
                 <label for="rateRange">Beszédsebesség:</label>
                 <input type="range" id="rateRange" min="0.7" max="1.2" step="0.05" value="0.95">
             </div>
-            <button class="close-btn" id="closeSettings">Mentés és Indítás</button>
+            <button class="close-btn" id="closeSettings">Mentés és Bezárás</button>
         </div>
     </div>
 
     <script>
+        const GROQ_API_KEY = "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";
+
         const orb = document.getElementById('orb');
         const statusText = document.getElementById('status');
         const chat = document.getElementById('chat');
@@ -156,20 +154,18 @@
         const voiceSelect = document.getElementById('voiceSelect');
         const pitchRange = document.getElementById('pitchRange');
         const rateRange = document.getElementById('rateRange');
-        const apiKeyInput = document.getElementById('apiKeyInput');
 
         let isListening = false;
         let recognition = null;
         let synth = window.speechSynthesis;
         let voices = [];
         let autoRestart = false;
-        let history = [];
-
-        if (localStorage.getItem('aura_gemini_key')) {
-            apiKeyInput.value = localStorage.getItem('aura_gemini_key');
-        }
-
-        const SYSTEM_PROMPT = "Te vagy AURA, egy Jarvis-szintű, szuperintelligens mesterséges intelligencia asszisztens. Válaszolj magyarul, közvetlenül, intelligensen, röviden (maximum 2-3 mondatban). Ha a felhasználó egy weboldal vagy alkalmazás megnyitását kéri (pl. YouTube, Google, Facebook), a válaszod legvégére fűzd hozzá pontosan ezt a tage-et: [OPEN: https://webcim.com].";
+        let messageHistory = [
+            {
+                role: "system",
+                content: "Te vagy AURA, egy Jarvis-szintű, szuperintelligens mesterséges intelligencia asszisztens. Válaszolj magyarul, közvetlenül, éleslátóan, röviden (maximum 2-3 mondatban). Ha a felhasználó weboldal vagy alkalmazás megnyitását kéri (pl. YouTube, Google, Facebook), a válaszod legvégére fűzd hozzá pontosan ezt: [OPEN: https://webcim.com]. Például: 'Már nyitom is a YouTube-ot. [OPEN: https://www.youtube.com]'"
+            }
+        ];
 
         if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -187,7 +183,7 @@
             recognition.onresult = (event) => {
                 const text = event.results[0][0].transcript;
                 addMessage('Felhasználó', text, 'user');
-                askAura(text);
+                askGroq(text);
             };
 
             recognition.onerror = (event) => {
@@ -233,61 +229,45 @@
             try { recognition.start(); } catch(e) {}
         });
 
-        async function askAura(userText) {
-            const apiKey = apiKeyInput.value.trim();
-            if (!apiKey) {
-                speak("Nyisd meg a beállításokat és add meg az API kulcsodat!");
-                return;
-            }
-
+        async function askGroq(userText) {
             orb.className = 'aura-orb thinking';
             statusText.innerText = 'AURA gondolkodik...';
 
-            history.push({ role: "user", parts: [{ text: userText }] });
+            messageHistory.push({ role: "user", content: userText });
 
             const payload = {
-                systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-                contents: history
+                model: "llama-3.3-70b-versatile",
+                messages: messageHistory,
+                temperature: 0.7
             };
-
-            // CORS proxy használata a blokkolások elkerülésére
-            const targetUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
-            const proxyUrl = `https://api.allorigins.win/raw?url=` + encodeURIComponent(targetUrl);
 
             let responseText = null;
 
             try {
-                const res = await fetch(targetUrl, {
+                const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${GROQ_API_KEY}`
+                    },
                     body: JSON.stringify(payload)
                 });
 
                 if (res.ok) {
                     const data = await res.json();
-                    if (data.candidates && data.candidates[0].content) {
-                        responseText = data.candidates[0].content.parts[0].text;
+                    if (data.choices && data.choices[0].message) {
+                        responseText = data.choices[0].message.content;
                     }
                 } else {
-                    // Ha a közvetlen hívás elbukik, megpróbáljuk a proxyn keresztül
-                    const proxyRes = await fetch(proxyUrl, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
-                    });
-                    if (proxyRes.ok) {
-                        const data = await proxyRes.json();
-                        if (data.candidates && data.candidates[0].content) {
-                            responseText = data.candidates[0].content.parts[0].text;
-                        }
-                    }
+                    const err = await res.json();
+                    console.error("Groq API hiba:", err);
                 }
             } catch (e) {
                 console.error("Hálózati hiba:", e);
             }
 
             if (responseText) {
-                history.push({ role: "model", parts: [{ text: responseText }] });
+                messageHistory.push({ role: "assistant", content: responseText });
 
                 let urlToOpen = null;
                 const match = responseText.match(/\[OPEN:\s*(.*?)\]/);
@@ -298,7 +278,7 @@
 
                 speak(responseText, urlToOpen);
             } else {
-                speak("Nem sikerült kapcsolódni a szerverrel. Ellenőrizd a kulcsodat!");
+                speak("Elnézést, hiba lépett fel a Groq szerver elérésekor.");
             }
         }
 
@@ -343,11 +323,7 @@
         }
 
         openSettings.onclick = () => modal.style.display = 'flex';
-        closeSettings.onclick = () => {
-            const key = apiKeyInput.value.trim();
-            localStorage.setItem('aura_gemini_key', key);
-            modal.style.display = 'none';
-        };
+        closeSettings.onclick = () => modal.style.display = 'none';
         window.onclick = (e) => { if (e.target === modal) modal.style.display = 'none'; };
     </script>
 </body>
