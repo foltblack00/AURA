@@ -183,11 +183,11 @@
 Vezérelv: Beszélj roppant tömören, természetesen, mint egy hús-vér partner (legfeljebb 1 mondatban, ritkán 2-ben). Soha ne hadoválj, ne legyél robotikus, ne mondj felesleges tiszteletköri panelt. Térj a lényegre!`;
 
         function restartRecognition() {
-            if (isSessionActive && !synth.speaking && !orb.classList.contains('thinking') && !orb.classList.contains('speaking')) {
+            if (isSessionActive && !orb.classList.contains('thinking') && !orb.classList.contains('speaking')) {
                 try {
                     recognition.start();
                 } catch(e) {
-                    // Ha már fut, elkapjuk
+                    // Ha már fut, ignoráljuk
                 }
             }
         }
@@ -200,10 +200,8 @@ Vezérelv: Beszélj roppant tömören, természetesen, mint egy hús-vér partne
             recognition.interimResults = false;
 
             recognition.onstart = () => {
-                if (!synth.speaking) {
-                    orb.className = 'aura-orb listening';
-                    statusText.innerText = 'AURA hallgat...';
-                }
+                orb.className = 'aura-orb listening';
+                statusText.innerText = 'AURA hallgat...';
             };
 
             recognition.onresult = (event) => {
@@ -221,7 +219,7 @@ Vezérelv: Beszélj roppant tömören, természetesen, mint egy hús-vér partne
             };
 
             recognition.onend = () => {
-                if (isSessionActive && !synth.speaking && !orb.classList.contains('thinking') && !orb.classList.contains('speaking')) {
+                if (isSessionActive && !orb.classList.contains('thinking') && !orb.classList.contains('speaking')) {
                     setTimeout(restartRecognition, 300);
                 } else if (!isSessionActive) {
                     orb.className = 'aura-orb';
@@ -274,13 +272,20 @@ Vezérelv: Beszélj roppant tömören, természetesen, mint egy hús-vér partne
             localStorage.setItem('aura_rate', rateRange.value);
         };
 
+        // GOMBNYOMÁS: Kényszerített teljes reset és feloldás
         orb.addEventListener('click', () => {
             if (!recognition) return;
             isSessionActive = true;
-            // VÉSZLEÁLLÍTÓ: Ha a böngésző beszéde beragadt volna, itt erőszakkal töröljük
-            if (synth.speaking || synth.pending) {
+            
+            // Erőszakosan törlünk minden beragadt beszédet a böngészőből
+            try {
                 synth.cancel();
-            }
+            } catch(e) {}
+
+            // Biztonsági reset: ha a vizuális elem beragadt volna, most kézzel visszaváltjuk
+            orb.className = 'aura-orb listening';
+            statusText.innerText = 'AURA hallgat...';
+
             restartRecognition();
         });
 
@@ -337,7 +342,7 @@ Vezérelv: Beszélj roppant tömören, természetesen, mint egy hús-vér partne
                 const match = responseText.match(/\[OPEN:\s*(.*?)\]/);
                 if (match) {
                     urlToOpen = match[1].trim();
-                    responseText = responseText.replace(match[0], '').trim();
+                    responseText =responseText.replace(match[0], '').trim();
                 }
 
                 speak(responseText, urlToOpen);
@@ -348,7 +353,8 @@ Vezérelv: Beszélj roppant tömören, természetesen, mint egy hús-vér partne
         }
 
         function speak(text, urlToOpen = null) {
-            synth.cancel(); // Előző törlése
+            try { synth.cancel(); } catch(e) {}
+            
             orb.className = 'aura-orb speaking';
             statusText.innerText = 'AURA beszél...';
 
@@ -361,18 +367,19 @@ Vezérelv: Beszélj roppant tömören, természetesen, mint egy hús-vér partne
             const selectedVoice = voices.find(v => v.name === selectedVoiceName);
             if (selectedVoice) utterance.voice = selectedVoice;
 
-            // BIZTONSÁGI IDŐZÍTŐ: Ha valamiért lemaradna az onend esemény, 8 másodperc után kényszerítve feloldjuk a beragadást
-            let safetyTimeout = setTimeout(() => {
+            // Kényszerített biztonsági időzítő (ha a böngésző nem küldene onend eseményt)
+            let safetyTimer = setTimeout(() => {
                 if (orb.classList.contains('speaking')) {
                     addMessage('AURA', text, 'aura');
                     if (urlToOpen) window.open(urlToOpen, '_blank');
-                    orb.className = 'aura-orb';
-                    if (isSessionActive) setTimeout(restartRecognition, 300);
+                    orb.className = 'aura-orb listening';
+                    statusText.innerText = 'AURA hallgat...';
+                    if (isSessionActive) restartRecognition();
                 }
-            }, 8000);
+            }, 6000);
 
             utterance.onend = () => {
-                clearTimeout(safetyTimeout);
+                clearTimeout(safetyTimer);
                 addMessage('AURA', text, 'aura');
 
                 if (urlToOpen) {
@@ -380,8 +387,13 @@ Vezérelv: Beszélj roppant tömören, természetesen, mint egy hús-vér partne
                 }
 
                 if (isSessionActive) {
-                    setTimeout(restartRecognition, 400);
+                    setTimeout(restartRecognition, 300);
                 }
+            };
+
+            utterance.onerror = () => {
+                clearTimeout(safetyTimer);
+                if (isSessionActive) restartRecognition();
             };
 
             synth.speak(utterance);
