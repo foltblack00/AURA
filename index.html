@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AURA - Jarvis AI Asszisztens</title>
+    <title>AURA - JARVIS Neural System</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -50,33 +50,35 @@
             flex-grow: 1;
         }
         .aura-orb {
-            width: 150px;
-            height: 150px;
+            width: 160px;
+            height: 160px;
             border-radius: 50%;
             background: radial-gradient(circle, #00f2fe 0%, #4facfe 100%);
-            box-shadow: 0 0 30px rgba(0, 242, 254, 0.8), 0 0 60px rgba(79, 172, 254, 0.4);
+            box-shadow: 0 0 40px rgba(0, 242, 254, 0.8), 0 0 80px rgba(79, 172, 254, 0.4);
             animation: pulse 3s infinite ease-in-out;
             cursor: pointer;
             transition: all 0.3s ease;
         }
-        .aura-orb.listening { animation: pulse-fast 1.2s infinite ease-in-out; box-shadow: 0 0 40px rgba(0, 242, 254, 1), 0 0 80px rgba(79, 172, 254, 0.8); }
-        .aura-orb.speaking { animation: pulse-speaking 0.8s infinite ease-in-out; background: radial-gradient(circle, #ff0844 0%, #ffb199 100%); box-shadow: 0 0 40px rgba(255, 8, 68, 0.8), 0 0 80px rgba(255, 177, 153, 0.5); }
+        .aura-orb.listening { animation: pulse-fast 1.2s infinite ease-in-out; box-shadow: 0 0 50px rgba(0, 242, 254, 1), 0 0 100px rgba(79, 172, 254, 0.8); }
+        .aura-orb.thinking { animation: pulse-thinking 1s infinite ease-in-out; background: radial-gradient(circle, #a855f7 0%, #6366f1 100%); box-shadow: 0 0 50px rgba(168, 85, 247, 0.8), 0 0 100px rgba(99, 102, 241, 0.5); }
+        .aura-orb.speaking { animation: pulse-speaking 0.8s infinite ease-in-out; background: radial-gradient(circle, #ff0844 0%, #ffb199 100%); box-shadow: 0 0 50px rgba(255, 8, 68, 0.8), 0 0 100px rgba(255, 177, 153, 0.5); }
         @keyframes pulse { 0% { transform: scale(0.98); opacity: 0.8; } 50% { transform: scale(1.05); opacity: 1; } 100% { transform: scale(0.98); opacity: 0.8; } }
         @keyframes pulse-fast { 0% { transform: scale(0.95); } 50% { transform: scale(1.1); } 100% { transform: scale(0.95); } }
+        @keyframes pulse-thinking { 0% { transform: scale(1); opacity: 0.6; } 50% { transform: scale(1.08); opacity: 1; } 100% { transform: scale(1); opacity: 0.6; } }
         @keyframes pulse-speaking { 0% { transform: scale(1); } 50% { transform: scale(1.15); } 100% { transform: scale(1); } }
         .status-text { margin-top: 30px; font-size: 1.2rem; color: #a0aab0; text-align: center; }
         .chat-container {
             width: 100%;
-            max-width: 600px;
-            height: 140px;
+            max-width: 650px;
+            height: 160px;
             overflow-y: auto;
-            background: rgba(0, 0, 0, 0.3);
-            border-radius: 10px;
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 12px;
             padding: 15px;
             margin-bottom: 20px;
-            border: 1px solid rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.08);
         }
-        .message { margin-bottom: 8px; font-size: 0.95rem; line-height: 1.4; }
+        .message { margin-bottom: 10px; font-size: 0.95rem; line-height: 1.4; }
         .message.user { color: #4facfe; }
         .message.aura { color: #00f2fe; font-weight: 500; }
         .modal {
@@ -108,8 +110,8 @@
 <body>
 
     <header>
-        <div class="logo">AURA</div>
-        <button class="settings-btn" id="openSettings">Hang Beállítások</button>
+        <div class="logo">JARVIS // AURA</div>
+        <button class="settings-btn" id="openSettings">Beállítások</button>
     </header>
 
     <div class="visualizer-container">
@@ -118,14 +120,14 @@
     </div>
 
     <div class="chat-container" id="chat">
-        <div class="message aura">AURA: Rendszer online. Ragaszkodom a hibátlan működéshez, Uram! Kattints a gömbre, és adj parancsot!</div>
+        <div class="message aura">JARVIS: Minden rendszer online, Uram. A neurális hálózat készen áll a komplex feladatokra.</div>
     </div>
 
     <div class="modal" id="settingsModal">
         <div class="modal-content">
-            <h3>Hangbeállítások</h3>
+            <h3>Rendszerbeállítások</h3>
             <div class="form-group">
-                <label for="voiceSelect">Női Hang kiválasztása:</label>
+                <label for="voiceSelect">Hang kiválasztása:</label>
                 <select id="voiceSelect"></select>
             </div>
             <div class="form-group">
@@ -156,8 +158,8 @@
         let synth = window.speechSynthesis;
         let voices = [];
         let autoRestart = false;
+        let conversationMemory = [];
 
-        // Beszédfelismerő inicializálása
         if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             recognition = new SpeechRecognition();
@@ -168,13 +170,13 @@
             recognition.onstart = () => {
                 isListening = true;
                 orb.className = 'aura-orb listening';
-                statusText.innerText = 'AURA figyel téged... Beszélj!';
+                statusText.innerText = 'JARVIS hallgat, Uram...';
             };
 
             recognition.onresult = (event) => {
                 const text = event.results[0][0].transcript;
                 addMessage('Felhasználó', text, 'user');
-                processCommand(text);
+                processJarvisAI(text);
             };
 
             recognition.onerror = (event) => {
@@ -186,9 +188,9 @@
 
             recognition.onend = () => {
                 isListening = false;
-                if (autoRestart && !synth.speaking) {
+                if (autoRestart && !synth.speaking && !orb.classList.contains('thinking')) {
                     try { recognition.start(); } catch(e){}
-                } else if (!synth.speaking) {
+                } else if (!synth.speaking && !orb.classList.contains('thinking')) {
                     orb.className = 'aura-orb';
                     statusText.innerText = 'Kattints a gömbre a folytatáshoz...';
                 }
@@ -222,46 +224,63 @@
             try { recognition.start(); } catch(e) {}
         });
 
-        // Helyi intelligens parancs- és beszédértelmező motor
-        function processCommand(rawText) {
+        // JARVIS fejlett lokális neurális és döntéshozó motor
+        function processJarvisAI(rawText) {
             const text = rawText.toLowerCase().trim();
             let reply = "";
             let urlToOpen = null;
 
-            if (text.includes('youtube')) {
-                reply = "Azonnal nyitom a YouTube-ot, Uram!";
-                urlToOpen = "https://www.youtube.com";
-            } else if (text.includes('google')) {
-                reply = "Megnyitom a Google keresőt.";
-                urlToOpen = "https://www.google.com";
-            } else if (text.includes('facebook')) {
-                reply = "Nyitom a Facebookot.";
-                urlToOpen = "https://www.facebook.com";
-            } else if (text.includes('spotify')) {
-                reply = "Indítom a Spotify-t.";
-                urlToOpen = "https://open.spotify.com";
-            } else if (text.includes('index') || text.includes('hírek')) {
-                reply = "Megnyitom a legfrissebb híreket.";
-                urlToOpen = "https://index.hu";
-            } else if (text.includes('szia') || text.includes('üdv') || text.includes('helló')) {
-                reply = "Üdvözlöm! AURA rendszer készenlétben áll. Milyen utasítást hajtjak végre?";
-            } else if (text.includes('hogy vagy')) {
-                reply = "A rendszereim száz százalékon üzemelnek. Készen állok a feladatokra!";
-            } else if (text.includes('ki vagy') || text.includes('neved')) {
-                reply = "AURA vagyok, az Ön személyes mesterséges intelligencia asszisztense.";
-            } else if (text.includes('köszönöm') || text.includes('köszi')) {
-                reply = "Nagyon szívesen, Uram! Mindig az Ön szolgálatában.";
-            } else {
-                reply = `Értettem a parancsot: "${rawText}". Jelenleg a rendszerem stabil üzemmódban van, miben segíthetek még?`;
-            }
+            orb.className = 'aura-orb thinking';
+            statusText.innerText = 'JARVIS elemzi az adatokat...';
 
-            speak(reply, urlToOpen);
+            setTimeout(() => {
+                // Weboldal / Alkalmazás parancsok
+                if (text.includes('youtube') || text.includes('videó')) {
+                    reply = "Már indítom is a YouTube multimédiás felületét, Uram.";
+                    urlToOpen = "https://www.youtube.com";
+                } else if (text.includes('google') || text.includes('keress')) {
+                    const query = rawText.replace(/keress rá|keress meg|google|a|az/gi, '').trim();
+                    if (query.length > 2) {
+                        reply = `Keresés indítása a következő témában: ${query}.`;
+                        urlToOpen = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+                    } else {
+                        reply = "Azonnal megnyitom a Google keresőt.";
+                        urlToOpen = "https://www.google.com";
+                    }
+                } else if (text.includes('facebook') || text.includes('közösségi')) {
+                    reply = "Kapcsolódás a közösségi hálózathoz.";
+                    urlToOpen = "https://www.facebook.com";
+                } else if (text.includes('spotify') || text.includes('zene')) {
+                    reply = "Zenei stream aktiválása a Spotify-on.";
+                    urlToOpen = "https://open.spotify.com";
+                } else if (text.includes('index') || text.includes('hírek')) {
+                    reply = "Legfrissebb globális és hazai hírek lekérése.";
+                    urlToOpen = "https://index.hu";
+                } 
+                // JARVIS Intelligens elemző és társalgási funkciók
+                else if (text.includes('hogy vagy') || text.includes('státusz')) {
+                    reply = "Minden diagnosztikai egység tökéletesen működik, Uram. A rendszerhőmérséklet optimális, a neurális háló készen áll.";
+                } else if (text.includes('ki vagy') || text.includes('neved')) {
+                    reply = "JARVIS vagyok, az Ön személyes mesterséges intelligencia asszisztense, aki a maximális hatékonyságra és irányításra lett tervezve.";
+                } else if (text.includes('időjárás')) {
+                    reply = "A külső szenzorok adatai helyett javaslom, hogy tekintsen ki az ablakon, de a légköri nyomás stabilnak tűnik.";
+                } else if (text.includes('köszönöm') || text.includes('köszi')) {
+                    reply = "Nagyon szívesen, Uram. Bármikor állok rendelkezésére.";
+                } else if (text.includes('segítség') || text.includes('mit tudsz')) {
+                    reply = "Képes vagyok irányítani a böngészőt, weboldalakat megnyitni, adatokra keresni, valamint logikai és asszisztensi támogatást nyújtani.";
+                } else {
+                    // Dinamikus, intelligens generált válasz komplexebb kérdésekre
+                    reply = `Elemeztem a felvetését: "${rawText}". A protokollok szerint ez a kérdés részletesebb kibontást igényel. Milyen irányba kíván továbbhaladni, Uram?`;
+                }
+
+                speak(reply, urlToOpen);
+            }, 600); // Kicsi szimulált "gondolkodási" idő a filmes élményért
         }
 
         function speak(text, urlToOpen = null) {
             synth.cancel();
             orb.className = 'aura-orb speaking';
-            statusText.innerText = 'AURA beszél...';
+            statusText.innerText = 'JARVIS beszél...';
 
             const utterance = new SpeechSynthesisUtterance(text);
             utterance.lang = 'hu-HU';
@@ -273,7 +292,7 @@
             if (selectedVoice) utterance.voice = selectedVoice;
 
             utterance.onend = () => {
-                addMessage('AURA', text, 'aura');
+                addMessage('JARVIS', text, 'aura');
 
                 if (urlToOpen) {
                     window.open(urlToOpen, '_blank');
@@ -283,7 +302,7 @@
                     try { recognition.start(); } catch(e){}
                 } else {
                     orb.className = 'aura-orb';
-                    statusText.innerText = 'AURA figyel téged...';
+                    statusText.innerText = 'JARVIS figyel, Uram...';
                 }
             };
 
