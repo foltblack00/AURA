@@ -187,7 +187,7 @@ Vezérelv: Beszélj roppant tömören, természetesen, mint egy hús-vér partne
                 try {
                     recognition.start();
                 } catch(e) {
-                    // Ha már fut, ignoráljuk
+                    // Ha már fut, elkapjuk
                 }
             }
         }
@@ -277,7 +277,10 @@ Vezérelv: Beszélj roppant tömören, természetesen, mint egy hús-vér partne
         orb.addEventListener('click', () => {
             if (!recognition) return;
             isSessionActive = true;
-            if (synth.speaking) synth.cancel();
+            // VÉSZLEÁLLÍTÓ: Ha a böngésző beszéde beragadt volna, itt erőszakkal töröljük
+            if (synth.speaking || synth.pending) {
+                synth.cancel();
+            }
             restartRecognition();
         });
 
@@ -345,7 +348,7 @@ Vezérelv: Beszélj roppant tömören, természetesen, mint egy hús-vér partne
         }
 
         function speak(text, urlToOpen = null) {
-            synth.cancel();
+            synth.cancel(); // Előző törlése
             orb.className = 'aura-orb speaking';
             statusText.innerText = 'AURA beszél...';
 
@@ -358,7 +361,18 @@ Vezérelv: Beszélj roppant tömören, természetesen, mint egy hús-vér partne
             const selectedVoice = voices.find(v => v.name === selectedVoiceName);
             if (selectedVoice) utterance.voice = selectedVoice;
 
+            // BIZTONSÁGI IDŐZÍTŐ: Ha valamiért lemaradna az onend esemény, 8 másodperc után kényszerítve feloldjuk a beragadást
+            let safetyTimeout = setTimeout(() => {
+                if (orb.classList.contains('speaking')) {
+                    addMessage('AURA', text, 'aura');
+                    if (urlToOpen) window.open(urlToOpen, '_blank');
+                    orb.className = 'aura-orb';
+                    if (isSessionActive) setTimeout(restartRecognition, 300);
+                }
+            }, 8000);
+
             utterance.onend = () => {
+                clearTimeout(safetyTimeout);
                 addMessage('AURA', text, 'aura');
 
                 if (urlToOpen) {
