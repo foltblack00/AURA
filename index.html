@@ -122,7 +122,7 @@
     </div>
 
     <div class="chat-container" id="chat">
-        <div class="message aura">AURA: Rendszer online. Emlékszem a korábbi dolgokra, és tanulok abból, amit mondasz!</div>
+        <div class="message aura" id="welcomeMsg">AURA: Rendszer online. Betöltöm a környezetet...</div>
     </div>
 
     <div class="modal" id="settingsModal">
@@ -137,8 +137,8 @@
                 <input type="range" id="pitchRange" min="0.8" max="1.4" step="0.05" value="1.15">
             </div>
             <div class="form-group">
-                <label for="rateRange">Beszédsebesség:</label>
-                <input type="range" id="rateRange" min="0.7" max="1.2" step="0.05" value="0.95">
+                <label for="rateRange">Beszédsebesség (Folyékonyabb):</label>
+                <input type="range" id="rateRange" min="0.8" max="1.3" step="0.05" value="1.05">
             </div>
             <button class="close-btn" id="closeSettings">Mentés és Bezárás</button>
         </div>
@@ -160,18 +160,61 @@
         let voices = [];
         let isSessionActive = false;
 
-        // Beállítások és hosszú távú memória betöltése a localStorage-ből
+        // Beállítások betöltése
         if (localStorage.getItem('aura_pitch')) pitchRange.value = localStorage.getItem('aura_pitch');
         if (localStorage.getItem('aura_rate')) rateRange.value = localStorage.getItem('aura_rate');
         
         let learnedMemory = localStorage.getItem('aura_learned_memory') || "Még nincsenek elmentett egyedi adatok.";
+        let reminders = JSON.parse(localStorage.getItem('aura_reminders') || "[]");
 
-        const BASE_PROMPT = "Te vagy AURA, egy intelligens, közvetlen és tanulékony AI asszisztens. Válaszolj magyarul, természetes, összefüggő mondatokban (2-3 mondatban).";
+        // Valós idejű dátum, óra, napszak és naptári adatok számítása
+        function getRealtimeContext() {
+            const now = new Date();
+            const hours = now.getHours();
+            let timeOfDay = "éjszaka";
+            let greeting = "Jó éjszakát";
+
+            if (hours >= 5 && hours < 10) { timeOfDay = "reggel"; greeting = "Jó reggelt"; }
+            else if (hours >= 10 && hours < 18) { timeOfDay = "nappal / délután"; greeting = "Jó napot kívánok"; }
+            else if (hours >= 18 && hours < 22) { timeOfDay = "este"; greeting = "Jó estét"; }
+
+            const options = { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' };
+            const dateString = now.toLocaleDateString('hu-HU', options);
+            const timeString = now.toLocaleTimeString('hu-HU', { hour: '2-digit', minute: '2-digit' });
+
+            return { greeting, dateString, timeString, timeOfDay, timestamp: now.getTime() };
+        }
+
+        // Automatikus indítási köszöntés és ellenőrzés
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                const ctx = getRealtimeContext();
+                const welcomeText = `${ctx.greeting}! Ma ${ctx.dateString} van, pontosan ${ctx.timeString}. Minden rendszer zökkenőmentesen üzemel. Miben segíthetek ma?`;
+                document.getElementById('welcomeMsg').innerText = `AURA: ${welcomeText}`;
+                speak(welcomeText);
+            }, 1000);
+        });
+
+        // Háttérben futó emlékeztető ellenőrző (minden 30 másodpercben megnézi, hogy van-e lejárt emlékeztető)
+        setInterval(() => {
+            const now = new Date().getTime();
+            reminders = reminders.filter(rem => {
+                if (now >= rem.time) {
+                    speak(`Figyelem, emlékeztető: ${rem.text}`);
+                    addMessage('AURA (Emlékeztető)', `Időszerű esemény: ${rem.text}`, 'aura');
+                    return false; // Töröljük a lejártat
+                }
+                return true;
+            });
+            localStorage.setItem('aura_reminders', JSON.stringify(reminders));
+        }, 30000);
+
+        const BASE_PROMPT = "Te vagy AURA, egy rendkívül intelligens, folyékonyan beszélő, közvetlen és tanulékony AI asszisztens. Beszélj természetesen, tisztán és kerek mondatokban.";
 
         if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             recognition = new SpeechRecognition();
-            recognition.continuous = false; // Visszaállítva biztonságos módra (nem vág bele a saját hangjába)
+            recognition.continuous = false;
             recognition.lang = 'hu-HU';
             recognition.interimResults = false;
 
@@ -198,7 +241,6 @@
             };
 
             recognition.onend = () => {
-                // Csak akkor indul újra automatikusan a hallgatás, ha már befejezte a beszédet
                 if (isSessionActive && !synth.speaking && !orb.classList.contains('thinking') && !orb.classList.contains('speaking')) {
                     setTimeout(() => { try { recognition.start(); } catch(e){} }, 300);
                 } else if (!isSessionActive) {
@@ -267,24 +309,47 @@
             orb.className = 'aura-orb thinking';
             statusText.innerText = 'AURA gondolkodik...';
 
-            // Megvizsgáljuk, hogy a felhasználó akar-e tanítani valamit
             const lower = userText.toLowerCase();
+
+            // 1. Tanulási / memóriakezelési parancs
             if (lower.includes('jegyezd meg') || lower.includes('emlékezz erre') || lower.includes('tanulj meg')) {
                 learnedMemory += "\n- " + userText;
                 localStorage.setItem('aura_learned_memory', learnedMemory);
-                speak("Rögzítettem, Uram! Ezt a jövőben sem fogom elfelejteni.");
+                speak("Rögzítettem a memóriámban. Ezt a jövőben mindig tudni fogom.");
                 return;
             }
 
-            // Összeállítjuk a teljes kontextust, beleértve a hosszú távú memóriát és a webes parancsot is
+            // 2. Emlékeztető beállítási parancs (pl. "Emlékeztess [valamire] 5 perc múlva")
+            if (lower.includes('emlékeztess') || lower.includes('szólj ha')) {
+                let delayMinutes = 5; // Alapértelmezett 5 perc, ha nincs megadva pontosabb
+                if (lower.includes('1 perc')) delayMinutes = 1;
+                else if (lower.includes('10 perc')) delayMinutes = 10;
+                else if (lower.includes('fél óra') || lower.includes('30 perc')) delayMinutes = 30;
+                else if (lower.includes('egy óra')) delayMinutes = 60;
+
+                const triggerTime = new Date().getTime() + (delayMinutes * 60 * 1000);
+                reminders.push({ text: userText, time: triggerTime });
+                localStorage.setItem('aura_reminders', JSON.stringify(reminders));
+
+                speak(`Rendben, ${delayMinutes} múlva értesíteni foglak erről az alkalomról.`);
+                return;
+            }
+
+            const ctx = getRealtimeContext();
+
             const fullPrompt = `${BASE_PROMPT}
             
-            [Hosszú távú memória / Amit eddig megtanultam rólad]:
+            [Aktuális időkontextus a szerveren]:
+            - Dátum: ${ctx.dateString}
+            - Pontos idő: ${ctx.timeString}
+            - Napszak: ${ctx.timeOfDay}
+
+            [Hosszú távú memória / Amit eddig megtanultam]:
             ${learnedMemory}
 
-            [Felhasználó aktuális kérése]: "${userText}"
+            [Felhasználó mondta]: "${userText}"
             
-            Ha a felhasználó weboldal megnyitását kéri (pl. YouTube, Google, Facebook), a válaszod végére illeszd be: [OPEN: https://webcim.com].`;
+            Ha a felhasználó az időről, dátumról vagy napszakról kérdez, használd a fenti időkontextust. Ha weboldal megnyitását kéri (pl. YouTube, Google, Facebook), a válaszod végére illeszd be: [OPEN: https://webcim.com].`;
 
             try {
                 const response = await puter.ai.chat(fullPrompt);
@@ -312,7 +377,7 @@
             const utterance = new SpeechSynthesisUtterance(text);
             utterance.lang = 'hu-HU';
             utterance.pitch = parseFloat(pitchRange.value);
-            utterance.rate = parseFloat(rateRange.value);
+            utterance.rate = parseFloat(rateRange.value); // Folyékonyabb beszédhez optimalizálva
 
             const selectedVoiceName = voiceSelect.value;
             const selectedVoice = voices.find(v => v.name === selectedVoiceName);
