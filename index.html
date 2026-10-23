@@ -118,11 +118,11 @@
 
     <div class="visualizer-container">
         <div class="aura-orb" id="orb"></div>
-        <div class="status-text" id="status">Kattints a gömbre az indításhoz...</div>
+        <div class="status-text" id="status">Kattints egyszer a gömbre az indításhoz...</div>
     </div>
 
     <div class="chat-container" id="chat">
-        <div class="message aura">AURA: Rendszer online. Kattints a gömbre, ha beszélni szeretnél!</div>
+        <div class="message aura">AURA: Rendszer online. Kattints a gömbre, és utána folyamatosan figyelni foglak!</div>
     </div>
 
     <div class="modal" id="settingsModal">
@@ -158,8 +158,8 @@
         let recognition = null;
         let synth = window.speechSynthesis;
         let voices = [];
+        let isSessionActive = false; // Jelzi, hogy elindítottad-e a folyamatos módot
 
-        // Normális, értelmes és közvetlen AI személyiség (nincs túlzott zagyvaság)
         const SYSTEM_PROMPT = "Te vagy AURA, egy intelligens, segítőkész és közvetlen AI asszisztens. Válaszolj magyarul, normális, összefüggő, tiszta mondatokban (2-3 mondatban). Ha a felhasználó weboldal megnyitását kéri (pl. YouTube, Google, Facebook), a válaszod végére illeszd be: [OPEN: https://webcim.com].";
 
         if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
@@ -178,22 +178,25 @@
                 const text = event.results[0][0].transcript.trim();
                 if (!text || text.length < 2) return;
 
-                // Kiírjuk a chatbe, hogy mit hallott a rendszer, így látszik, ha a mikrofon torzított
                 addMessage('Felhasználó', text, 'user');
                 askRealAI(text);
             };
 
             recognition.onerror = (event) => {
                 console.log('Felismerési hiba:', event.error);
-                orb.className = 'aura-orb';
-                statusText.innerText = 'Hiba történt. Kattints újra a gömbre!';
+                // Ha hiba van (pl. csend miatt timeout), de aktív a munkamenet, indítsuk újra automatikusan
+                if (isSessionActive && !synth.speaking) {
+                    setTimeout(() => { try { recognition.start(); } catch(e){} }, 500);
+                }
             };
 
             recognition.onend = () => {
-                // Csak akkor áll vissza, ha nem éppen gondolkodik vagy beszél
-                if (!orb.classList.contains('thinking') && !orb.classList.contains('speaking')) {
+                // Ha aktív a munkamenet és nem beszél az AI, automatikusan figyeljen tovább kattintás nélkül!
+                if (isSessionActive && !synth.speaking && !orb.classList.contains('thinking') && !orb.classList.contains('speaking')) {
+                    setTimeout(() => { try { recognition.start(); } catch(e){} }, 300);
+                } else if (!isSessionActive) {
                     orb.className = 'aura-orb';
-                    statusText.innerText = 'Kattints a gömbre a beszélgetéshez...';
+                    statusText.innerText = 'Kattints egyszer a gömbre az indításhoz...';
                 }
             };
         } else {
@@ -218,9 +221,10 @@
         }
         loadVoices();
 
-        // Kattintásra hallgat, nem ugrik be magától
+        // Egyszeri kattintás elindítja a folyamatos figyelést
         orb.addEventListener('click', () => {
             if (!recognition) return;
+            isSessionActive = true;
             if (synth.speaking) synth.cancel();
             try { 
                 recognition.start(); 
@@ -274,8 +278,10 @@
                     window.open(urlToOpen, '_blank');
                 }
 
-                orb.className = 'aura-orb';
-                statusText.innerText = 'Kattints a gömbre a beszélgetéshez...';
+                // Beszéd után azonnal visszatér a hallgatásba automatikusan
+                if (isSessionActive) {
+                    setTimeout(() => { try { recognition.start(); } catch(e){} }, 400);
+                }
             };
 
             synth.speak(utterance);
