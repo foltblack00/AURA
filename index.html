@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>JARVIS // AURA Real AI</title>
-    <!-- Puter AI SDK betöltése - Kerüli a CORS hálózati blokkolást -->
+    <title>AURA - Személyes AI Asszisztens</title>
+    <!-- Puter AI SDK betöltése -->
     <script src="https://js.puter.com/v2/"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -112,7 +112,7 @@
 <body>
 
     <header>
-        <div class="logo">JARVIS // AURA</div>
+        <div class="logo">AURA</div>
         <button class="settings-btn" id="openSettings">Hang Beállítások</button>
     </header>
 
@@ -122,7 +122,7 @@
     </div>
 
     <div class="chat-container" id="chat">
-        <div class="message aura">JARVIS: Valódi AI hálózat csatlakoztatva. Készen állok a kötetlen beszélgetésre és az utasításokra, Uram!</div>
+        <div class="message aura">AURA: Rendszer készenlétben. Csak akkor válaszolok, ha hozzám szól, Uram!</div>
     </div>
 
     <div class="modal" id="settingsModal">
@@ -161,8 +161,7 @@
         let voices = [];
         let autoRestart = false;
 
-        // Belső kontextus a JARVIS személyiséghez
-        const SYSTEM_PROMPT = "Te vagy JARVIS (vagy AURA), egy szuperintelligens, közvetlen, stílusos AI asszisztens. Válaszolj magyarul, természetes élőbeszéd hangnemben, értelmesen és szabatosan (lehetőleg 2-4 mondatban). Ha a felhasználó egy weboldal megnyitását kéri (pl. YouTube, Google, Facebook), a válaszod legvégére illeszd be pontosan ezt a jelölést: [OPEN: https://webcim.com].";
+        const SYSTEM_PROMPT = "Te vagy AURA, egy szuperintelligens, közvetlen, stílusos AI asszisztens. Válaszolj magyarul, természetes élőbeszéd hangnemben, értelmesen és szabatosan (lehetőleg 2-4 mondatban). Ha a felhasználó egy weboldal megnyitását kéri (pl. YouTube, Google, Facebook), a válaszod legvégére illeszd be pontosan ezt a jelölést: [OPEN: https://webcim.com].";
 
         if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -174,30 +173,28 @@
             recognition.onstart = () => {
                 isListening = true;
                 orb.className = 'aura-orb listening';
-                statusText.innerText = 'JARVIS hallgat téged...';
+                statusText.innerText = 'AURA hallgat téged...';
             };
 
             recognition.onresult = (event) => {
-                const text = event.results[0][0].transcript;
+                const text = event.results[0][0].transcript.trim();
+                
+                if (!text || text.length < 2) {
+                    return; 
+                }
+
                 addMessage('Felhasználó', text, 'user');
                 askRealAI(text);
             };
 
             recognition.onerror = (event) => {
                 console.log('Felismerési hiba:', event.error);
-                if (autoRestart && event.error !== 'not-allowed') {
-                    setTimeout(() => { try { recognition.start(); } catch(e){} }, 500);
-                }
             };
 
             recognition.onend = () => {
                 isListening = false;
-                if (autoRestart && !synth.speaking && !orb.classList.contains('thinking')) {
-                    try { recognition.start(); } catch(e){}
-                } else if (!synth.speaking && !orb.classList.contains('thinking')) {
-                    orb.className = 'aura-orb';
-                    statusText.innerText = 'Kattints a gömbre a folytatáshoz...';
-                }
+                orb.className = 'aura-orb';
+                statusText.innerText = 'Kattints a gömbre a beszélgetéshez...';
             };
         } else {
             statusText.innerText = 'A böngésző nem támogatja a beszédfelismerést.';
@@ -223,20 +220,18 @@
 
         orb.addEventListener('click', () => {
             if (!recognition) return;
-            autoRestart = true;
+            autoRestart = false;
             if (synth.speaking) synth.cancel();
             try { recognition.start(); } catch(e) {}
         });
 
-        // Valódi AI hívás Puter.js-en keresztül
         async function askRealAI(userText) {
             orb.className = 'aura-orb thinking';
-            statusText.innerText = 'JARVIS gondolkodik...';
+            statusText.innerText = 'AURA gondolkodik...';
 
             const prompt = `${SYSTEM_PROMPT}\n\nFelhasználó: ${userText}`;
 
             try {
-                // A Puter.js ingyenesen meghívja a Gemini/LLM modellt CORS hibák nélkül
                 const response = await puter.ai.chat(prompt);
                 let responseText = response.toString();
 
@@ -257,7 +252,7 @@
         function speak(text, urlToOpen = null) {
             synth.cancel();
             orb.className = 'aura-orb speaking';
-            statusText.innerText = 'JARVIS beszél...';
+            statusText.innerText = 'AURA beszél...';
 
             const utterance = new SpeechSynthesisUtterance(text);
             utterance.lang = 'hu-HU';
@@ -269,18 +264,14 @@
             if (selectedVoice) utterance.voice = selectedVoice;
 
             utterance.onend = () => {
-                addMessage('JARVIS', text, 'aura');
+                addMessage('AURA', text, 'aura');
 
                 if (urlToOpen) {
                     window.open(urlToOpen, '_blank');
                 }
 
-                if (autoRestart) {
-                    try { recognition.start(); } catch(e){}
-                } else {
-                    orb.className = 'aura-orb';
-                    statusText.innerText = 'JARVIS figyel téged...';
-                }
+                orb.className = 'aura-orb';
+                statusText.innerText = 'Kattints a gömbre a beszélgetéshez...';
             };
 
             synth.speak(utterance);
