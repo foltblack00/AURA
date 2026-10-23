@@ -122,14 +122,14 @@
     </div>
 
     <div class="chat-container" id="chat">
-        <div class="message aura">AURA: Rendszer online. Kattints a gömbre, és utána folyamatosan figyelni foglak!</div>
+        <div class="message aura">AURA: Rendszer online. Ha beszélek és közbeszólsz, azonnal elhallgatok és rád figyelek!</div>
     </div>
 
     <div class="modal" id="settingsModal">
         <div class="modal-content">
             <h3>Rendszerbeállítások</h3>
             <div class="form-group">
-                <label for="voiceSelect">Hang kiválasztása:</label>
+                <label for="voiceSelect">Női hang kiválasztása:</label>
                 <select id="voiceSelect"></select>
             </div>
             <div class="form-group">
@@ -158,45 +158,54 @@
         let recognition = null;
         let synth = window.speechSynthesis;
         let voices = [];
-        let isSessionActive = false; // Jelzi, hogy elindítottad-e a folyamatos módot
+        let isSessionActive = false;
 
-        const SYSTEM_PROMPT = "Te vagy AURA, egy intelligens, segítőkész és közvetlen AI asszisztens. Válaszolj magyarul, normális, összefüggő, tiszta mondatokban (2-3 mondatban). Ha a felhasználó weboldal megnyitását kéri (pl. YouTube, Google, Facebook), a válaszod végére illeszd be: [OPEN: https://webcim.com].";
+        if (localStorage.getItem('aura_pitch')) pitchRange.value = localStorage.getItem('aura_pitch');
+        if (localStorage.getItem('aura_rate')) rateRange.value = localStorage.getItem('aura_rate');
+
+        const SYSTEM_PROMPT = "Te vagy AURA, egy intelligens, dinamikus AI asszisztens. Válaszolj magyarul, természetes, összefüggő mondatokban (2-3 mondatban). Ha a felhasználó közbeszól vagy új témát hoz fel, alkalmazkodj hozzá, és a legfontosabbra fókuszálj. Ha weboldal megnyitását kéri (pl. YouTube, Google, Facebook), a válaszod végére illeszd be: [OPEN: https://webcim.com].";
 
         if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             recognition = new SpeechRecognition();
-            recognition.continuous = false;
+            recognition.continuous = true; // Folyamatos hallgatás engedélyezése a szavába vágáshoz
             recognition.lang = 'hu-HU';
-            recognition.interimResults = false;
+            recognition.interimResults = true; // Köztes eredmények, hogy azonnal reagáljon, ha beszélsz
 
             recognition.onstart = () => {
-                orb.className = 'aura-orb listening';
-                statusText.innerText = 'AURA hallgat... Beszélj most!';
+                if (!synth.speaking) {
+                    orb.className = 'aura-orb listening';
+                    statusText.innerText = 'AURA hallgat... Beszélj most!';
+                }
             };
 
             recognition.onresult = (event) => {
-                const text = event.results[0][0].transcript.trim();
+                const text = event.results[event.results.length - 1][0].transcript.trim();
+                
                 if (!text || text.length < 2) return;
 
-                addMessage('Felhasználó', text, 'user');
-                askRealAI(text);
+                // HA AURA BESZÉL ÉS TE ELKEZDED MONDANI (Közbeszólás / Szavába vágás):
+                if (synth.speaking) {
+                    synth.cancel(); // Azonnal elhallgattatjuk
+                }
+
+                // Ha végleges a mondatod (nemcsak dadogás közben)
+                if (event.results[event.results.length - 1].isFinal) {
+                    addMessage('Felhasználó', text, 'user');
+                    askRealAI(text);
+                }
             };
 
             recognition.onerror = (event) => {
                 console.log('Felismerési hiba:', event.error);
-                // Ha hiba van (pl. csend miatt timeout), de aktív a munkamenet, indítsuk újra automatikusan
                 if (isSessionActive && !synth.speaking) {
                     setTimeout(() => { try { recognition.start(); } catch(e){} }, 500);
                 }
             };
 
             recognition.onend = () => {
-                // Ha aktív a munkamenet és nem beszél az AI, automatikusan figyeljen tovább kattintás nélkül!
-                if (isSessionActive && !synth.speaking && !orb.classList.contains('thinking') && !orb.classList.contains('speaking')) {
+                if (isSessionActive && !synth.speaking && !orb.classList.contains('thinking')) {
                     setTimeout(() => { try { recognition.start(); } catch(e){} }, 300);
-                } else if (!isSessionActive) {
-                    orb.className = 'aura-orb';
-                    statusText.innerText = 'Kattints egyszer a gömbre az indításhoz...';
                 }
             };
         } else {
@@ -206,22 +215,46 @@
         function loadVoices() {
             voices = synth.getVoices();
             voiceSelect.innerHTML = '';
+            
+            const savedVoice = localStorage.getItem('aura_voice');
+
             voices.forEach(v => {
-                const opt = document.createElement('option');
-                opt.value = v.name;
-                opt.innerText = `${v.name} (${v.lang})`;
-                if (v.lang.includes('hu') || v.name.includes('Noemi') || v.name.includes('Noémi') || v.name.includes('Google')) {
-                    opt.selected = true;
+                if (v.lang.includes('hu')) {
+                    const opt = document.createElement('option');
+                    opt.value = v.name;
+                    opt.innerText = `${v.name} (${v.lang})`;
+                    
+                    if (savedVoice && v.name === savedVoice) {
+                        opt.selected = true;
+                    } else if (!savedVoice && (v.name.toLowerCase().includes('noemi') || v.name.toLowerCase().includes('noémi') || v.name.toLowerCase().includes('google') || v.name.toLowerCase().includes('zsuzsa'))) {
+                        opt.selected = true;
+                    }
+                    voiceSelect.appendChild(opt);
                 }
-                voiceSelect.appendChild(opt);
             });
+
+            if (voiceSelect.options.length === 0) {
+                voices.forEach(v => {
+                    const opt = document.createElement('option');
+                    opt.value = v.name;
+                    opt.innerText = `${v.name} (${v.lang})`;
+                    voiceSelect.appendChild(opt);
+                });
+            }
         }
+
         if (speechSynthesis.onvoiceschanged !== undefined) {
             speechSynthesis.onvoiceschanged = loadVoices;
         }
         loadVoices();
 
-        // Egyszeri kattintás elindítja a folyamatos figyelést
+        closeSettings.onclick = () => {
+            modal.style.display = 'none';
+            localStorage.setItem('aura_voice', voiceSelect.value);
+            localStorage.setItem('aura_pitch', pitchRange.value);
+            localStorage.setItem('aura_rate', rateRange.value);
+        };
+
         orb.addEventListener('click', () => {
             if (!recognition) return;
             isSessionActive = true;
@@ -237,7 +270,7 @@
             orb.className = 'aura-orb thinking';
             statusText.innerText = 'AURA gondolkodik...';
 
-            const prompt = `${SYSTEM_PROMPT}\n\nFelhasználó mondta: "${userText}"\n\nVálasz:`;
+            const prompt = `${SYSTEM_PROMPT}\n\nA felhasználó közbeszólt vagy ezt mondta: "${userText}"\n\nVálasz:`;
 
             try {
                 const response = await puter.ai.chat(prompt);
@@ -260,7 +293,7 @@
         function speak(text, urlToOpen = null) {
             synth.cancel();
             orb.className = 'aura-orb speaking';
-            statusText.innerText = 'AURA beszél...';
+            statusText.innerText = 'AURA beszél... (Vágj a szavába, ha akarod!)';
 
             const utterance = new SpeechSynthesisUtterance(text);
             utterance.lang = 'hu-HU';
@@ -278,9 +311,9 @@
                     window.open(urlToOpen, '_blank');
                 }
 
-                // Beszéd után azonnal visszatér a hallgatásba automatikusan
                 if (isSessionActive) {
-                    setTimeout(() => { try { recognition.start(); } catch(e){} }, 400);
+                    orb.className = 'aura-orb listening';
+                    statusText.innerText = 'AURA hallgat...';
                 }
             };
 
@@ -296,7 +329,6 @@
         }
 
         openSettings.onclick = () => modal.style.display = 'flex';
-        closeSettings.onclick = () => modal.style.display = 'none';
         window.onclick = (e) => { if (e.target === modal) modal.style.display = 'none'; };
     </script>
 </body>
