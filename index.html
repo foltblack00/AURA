@@ -122,7 +122,7 @@
     </div>
 
     <div class="chat-container" id="chat">
-        <div class="message aura" id="welcomeMsg">AURA: Rendszer online. Betöltöm a környezetet...</div>
+        <div class="message aura" id="welcomeMsg">AURA: Online vagyok. Hallgatlak.</div>
     </div>
 
     <div class="modal" id="settingsModal">
@@ -137,7 +137,7 @@
                 <input type="range" id="pitchRange" min="0.8" max="1.4" step="0.05" value="1.15">
             </div>
             <div class="form-group">
-                <label for="rateRange">Beszédsebesség (Folyékonyabb):</label>
+                <label for="rateRange">Beszédsebesség:</label>
                 <input type="range" id="rateRange" min="0.8" max="1.3" step="0.05" value="1.05">
             </div>
             <button class="close-btn" id="closeSettings">Mentés és Bezárás</button>
@@ -160,56 +160,57 @@
         let voices = [];
         let isSessionActive = false;
 
-        // Beállítások betöltése
         if (localStorage.getItem('aura_pitch')) pitchRange.value = localStorage.getItem('aura_pitch');
         if (localStorage.getItem('aura_rate')) rateRange.value = localStorage.getItem('aura_rate');
         
         let learnedMemory = localStorage.getItem('aura_learned_memory') || "Még nincsenek elmentett egyedi adatok.";
         let reminders = JSON.parse(localStorage.getItem('aura_reminders') || "[]");
 
-        // Valós idejű dátum, óra, napszak és naptári adatok számítása
         function getRealtimeContext() {
             const now = new Date();
             const hours = now.getHours();
-            let timeOfDay = "éjszaka";
-            let greeting = "Jó éjszakát";
-
-            if (hours >= 5 && hours < 10) { timeOfDay = "reggel"; greeting = "Jó reggelt"; }
-            else if (hours >= 10 && hours < 18) { timeOfDay = "nappal / délután"; greeting = "Jó napot kívánok"; }
-            else if (hours >= 18 && hours < 22) { timeOfDay = "este"; greeting = "Jó estét"; }
-
-            const options = { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' };
-            const dateString = now.toLocaleDateString('hu-HU', options);
-            const timeString = now.toLocaleTimeString('hu-HU', { hour: '2-digit', minute: '2-digit' });
-
-            return { greeting, dateString, timeString, timeOfDay, timestamp: now.getTime() };
+            let greeting = "Helló";
+            if (hours >= 5 && hours < 10) { greeting = "Jó reggelt"; }
+            else if (hours >= 10 && hours < 18) { greeting = "Szia"; }
+            else if (hours >= 18 && hours < 22) { greeting = "Jó estét"; }
+            return { greeting };
         }
 
-        // Automatikus indítási köszöntés és ellenőrzés
         window.addEventListener('load', () => {
             setTimeout(() => {
                 const ctx = getRealtimeContext();
-                const welcomeText = `${ctx.greeting}! Ma ${ctx.dateString} van, pontosan ${ctx.timeString}. Minden rendszer zökkenőmentesen üzemel. Miben segíthetek ma?`;
+                const welcomeText = `${ctx.greeting}! AURA vagyok. Hallgatlak.`;
                 document.getElementById('welcomeMsg').innerText = `AURA: ${welcomeText}`;
                 speak(welcomeText);
-            }, 1000);
+            }, 800);
         });
 
-        // Háttérben futó emlékeztető ellenőrző (minden 30 másodpercben megnézi, hogy van-e lejárt emlékeztető)
         setInterval(() => {
             const now = new Date().getTime();
             reminders = reminders.filter(rem => {
                 if (now >= rem.time) {
-                    speak(`Figyelem, emlékeztető: ${rem.text}`);
-                    addMessage('AURA (Emlékeztető)', `Időszerű esemény: ${rem.text}`, 'aura');
-                    return false; // Töröljük a lejártat
+                    speak(`Emlékeztető: ${rem.text}`);
+                    addMessage('AURA (Emlékeztető)', `Esemény: ${rem.text}`, 'aura');
+                    return false;
                 }
                 return true;
             });
             localStorage.setItem('aura_reminders', JSON.stringify(reminders));
         }, 30000);
 
-        const BASE_PROMPT = "Te vagy AURA, egy rendkívül intelligens, folyékonyan beszélő, közvetlen és tanulékony AI asszisztens. Beszélj természetesen, tisztán és kerek mondatokban.";
+        const BASE_PROMPT = `Te vagy AURA, egy rendkívül intelligens, közvetlen, emberi hangnemben beszélő AI asszisztens, akit a felhasználó tervezett. 
+Vezérelv: Beszélj roppant tömören, természetesen, mint egy hús-vér partner (legfeljebb 1 mondatban, ritkán 2-ben). Soha ne hadoválj, ne legyél robotikus, ne mondj felesleges tiszteletköri panelt. Térj a lényegre!`;
+
+        // Folyamatos hallgatás újraindító funkció (Keep-Alive Watchdog)
+        function restartRecognition() {
+            if (isSessionActive && !synth.speaking && !orb.classList.contains('thinking') && !orb.classList.contains('speaking')) {
+                try {
+                    recognition.start();
+                } catch(e) {
+                    // Ha már fut, elkapjuk a hibát és várunk a következő ciklusra
+                }
+            }
+        }
 
         if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -221,7 +222,7 @@
             recognition.onstart = () => {
                 if (!synth.speaking) {
                     orb.className = 'aura-orb listening';
-                    statusText.innerText = 'AURA hallgat... Beszélj most!';
+                    statusText.innerText = 'AURA hallgat...';
                 }
             };
 
@@ -234,15 +235,16 @@
             };
 
             recognition.onerror = (event) => {
-                console.log('Felismerési hiba:', event.error);
-                if (isSessionActive && !synth.speaking) {
-                    setTimeout(() => { try { recognition.start(); } catch(e){} }, 500);
+                // Csend miatti timeout vagy hálózati rezdülés esetén azonnal újrapróbáljuk
+                if (isSessionActive) {
+                    setTimeout(restartRecognition, 400);
                 }
             };
 
             recognition.onend = () => {
+                // Amikor leáll a felismerő, és aktívak vagyunk, azonnal újraindítjuk
                 if (isSessionActive && !synth.speaking && !orb.classList.contains('thinking') && !orb.classList.contains('speaking')) {
-                    setTimeout(() => { try { recognition.start(); } catch(e){} }, 300);
+                    setTimeout(restartRecognition, 300);
                 } else if (!isSessionActive) {
                     orb.className = 'aura-orb';
                     statusText.innerText = 'Kattints egyszer a gömbre az indításhoz...';
@@ -298,58 +300,53 @@
             if (!recognition) return;
             isSessionActive = true;
             if (synth.speaking) synth.cancel();
-            try { 
-                recognition.start(); 
-            } catch(e) {
-                console.log("Már fut a felismerő");
-            }
+            restartRecognition();
         });
 
         async function askRealAI(userText) {
             orb.className = 'aura-orb thinking';
-            statusText.innerText = 'AURA gondolkodik...';
+            statusText.innerText = 'Gondolkodom...';
 
             const lower = userText.toLowerCase();
 
-            // 1. Tanulási / memóriakezelési parancs
             if (lower.includes('jegyezd meg') || lower.includes('emlékezz erre') || lower.includes('tanulj meg')) {
                 learnedMemory += "\n- " + userText;
                 localStorage.setItem('aura_learned_memory', learnedMemory);
-                speak("Rögzítettem a memóriámban. Ezt a jövőben mindig tudni fogom.");
+                speak("Elmentve.");
                 return;
             }
 
-            // 2. Emlékeztető beállítási parancs (pl. "Emlékeztess [valamire] 5 perc múlva")
             if (lower.includes('emlékeztess') || lower.includes('szólj ha')) {
-                let delayMinutes = 5; // Alapértelmezett 5 perc, ha nincs megadva pontosabb
+                let delayMinutes = 5;
                 if (lower.includes('1 perc')) delayMinutes = 1;
                 else if (lower.includes('10 perc')) delayMinutes = 10;
-                else if (lower.includes('fél óra') || lower.includes('30 perc')) delayMinutes = 30;
+                else if (lower.includes('30 perc')) delayMinutes = 30;
                 else if (lower.includes('egy óra')) delayMinutes = 60;
 
                 const triggerTime = new Date().getTime() + (delayMinutes * 60 * 1000);
                 reminders.push({ text: userText, time: triggerTime });
                 localStorage.setItem('aura_reminders', JSON.stringify(reminders));
 
-                speak(`Rendben, ${delayMinutes} múlva értesíteni foglak erről az alkalomról.`);
+                speak(`Rendben, ${delayMinutes} perc múlva szólok.`);
                 return;
             }
 
-            const ctx = getRealtimeContext();
+            const now = new Date();
+            const dateString = now.toLocaleDateString('hu-HU', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
+            const timeString = now.toLocaleTimeString('hu-HU', { hour: '2-digit', minute: '2-digit' });
+
+            let timeContextInfo = "";
+            if (lower.includes('idő') || lower.includes('hány óra') || lower.includes('dátum') || lower.includes('milyen nap')) {
+                timeContextInfo = `[Pontos idő: ${timeString}, Dátum: ${dateString}]`;
+            }
 
             const fullPrompt = `${BASE_PROMPT}
             
-            [Aktuális időkontextus a szerveren]:
-            - Dátum: ${ctx.dateString}
-            - Pontos idő: ${ctx.timeString}
-            - Napszak: ${ctx.timeOfDay}
-
-            [Hosszú távú memória / Amit eddig megtanultam]:
-            ${learnedMemory}
-
-            [Felhasználó mondta]: "${userText}"
+            ${timeContextInfo}
+            [Memória]: ${learnedMemory}
+            [Felhasználó]: "${userText}"
             
-            Ha a felhasználó az időről, dátumról vagy napszakról kérdez, használd a fenti időkontextust. Ha weboldal megnyitását kéri (pl. YouTube, Google, Facebook), a válaszod végére illeszd be: [OPEN: https://webcim.com].`;
+            Ha weboldal nyitását kéri, a válasz végére tedd be: [OPEN: https://webcim.com].`;
 
             try {
                 const response = await puter.ai.chat(fullPrompt);
@@ -365,7 +362,7 @@
                 speak(responseText, urlToOpen);
             } catch (error) {
                 console.error("AI Hiba:", error);
-                speak("Elnézést, hiba történt a válaszadás közben.");
+                speak("Hiba történt.");
             }
         }
 
@@ -377,7 +374,7 @@
             const utterance = new SpeechSynthesisUtterance(text);
             utterance.lang = 'hu-HU';
             utterance.pitch = parseFloat(pitchRange.value);
-            utterance.rate = parseFloat(rateRange.value); // Folyékonyabb beszédhez optimalizálva
+            utterance.rate = parseFloat(rateRange.value);
 
             const selectedVoiceName = voiceSelect.value;
             const selectedVoice = voices.find(v => v.name === selectedVoiceName);
@@ -391,7 +388,7 @@
                 }
 
                 if (isSessionActive) {
-                    setTimeout(() => { try { recognition.start(); } catch(e){} }, 400);
+                    setTimeout(restartRecognition, 400);
                 }
             };
 
