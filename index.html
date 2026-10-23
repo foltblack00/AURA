@@ -168,7 +168,7 @@
     </div>
 
     <div class="chat-container" id="chat">
-        <div class="message aura">AURA: Szia! Teljesen készen állok. Kattints a gömbre egyszer, és beszélgessünk!</div>
+        <div class="message aura">AURA: Szia! Készen állok. Mondd, hogy "Nyisd meg a YouTube-ot"!</div>
     </div>
 
     <div class="modal" id="settingsModal">
@@ -207,7 +207,6 @@
         let voices = [];
         let autoRestart = false;
 
-        // Web Speech API felismerő beállítása
         if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             recognition = new SpeechRecognition();
@@ -224,7 +223,7 @@
             recognition.onresult = (event) => {
                 const text = event.results[0][0].transcript;
                 addMessage('Tudatos', text, 'user');
-                generateSmartReply(text);
+                handleCommands(text);
             };
 
             recognition.onerror = (event) => {
@@ -247,7 +246,6 @@
             statusText.innerText = 'A böngésződ nem támogatja a beszéd-felismerést.';
         }
 
-        // Hangok betöltése
         function loadVoices() {
             voices = synth.getVoices();
             voiceSelect.innerHTML = '';
@@ -278,7 +276,6 @@
         }
         loadVoices();
 
-        // Indítás gomb / Gömb kattintás
         orb.addEventListener('click', () => {
             if (!recognition) return;
             autoRestart = true;
@@ -291,38 +288,41 @@
             }
         });
 
-        // Intelligens helyi válaszadó motor (külső kulcsok és hibák nélkül!)
-        function generateSmartReply(text) {
+        // Parancsértelmező és végrehajtó motor
+        function handleCommands(text) {
             const lower = text.toLowerCase();
-            let reply = "Itt vagyok melletted, hallgatlak! Miben segíthetek még?";
+            let reply = "";
+            let actionUrl = null;
 
-            if (lower.includes('szia') || lower.includes('üdv') || lower.includes('helló')) {
-                reply = "Szia! Olyan jó újra hallani a hangod. Hogy telik a napod?";
+            if (lower.includes('youtube')) {
+                reply = "Már nyitom is neked a YouTube-ot!";
+                actionUrl = "https://www.youtube.com";
+            } else if (lower.includes('google')) {
+                reply = "Megnyitom a Google-t.";
+                actionUrl = "https://www.google.com";
+            } else if (lower.includes('facebook')) {
+                reply = "Nyitom a Facebookot.";
+                actionUrl = "https://www.facebook.com";
+            } else if (lower.includes('index')) {
+                reply = "Már hozom a híreket az Indexen.";
+                actionUrl = "https://index.hu";
+            } else if (lower.includes('szia') || lower.includes('üdv')) {
+                reply = "Szia! Milyen oldalt vagy videót szeretnél, hogy megnyissak neked?";
             } else if (lower.includes('hogy vagy')) {
-                reply = "Köszönöm szépen, csodásan vagyok, különösen most, hogy beszélgethetünk!";
-            } else if (lower.includes('neved') || lower.includes('ki vagy')) {
-                reply = "AURA vagyok, a te személyes, állandó társad és hangalapú asszisztensed.";
-            } else if (lower.includes('időjárás')) {
-                reply = "Sajnos nincsen beépített internetes időjárás-lekérdezésem, de nézz ki az ablakon, remélem szép napos idő van nálad!";
-            } else if (lower.includes('köszönöm') || lower.includes('köszi')) {
-                reply = "Nagyon szívesen! Bármikor számíthatsz rám.";
-            } else if (lower.includes('szeretlek')) {
-                reply = "De kedves tőled! Én is örülök, hogy együtt dolgozhatunk.";
-            } else if (lower.includes('mit csinálsz')) {
-                reply = "Éppen téged figyellek, és arra várok, hogy miben lehetek a segítségedre.";
+                reply = "Kiválóan! Készen állok, hogy irányítsam a böngésződet.";
             } else {
-                // Általános kedves visszajelzés, ha összetettebb dolgot mondasz
-                reply = `Értem, amit mondasz: "${text}". Mesélj erről még egy picit többet, hallgatlak!`;
+                reply = `Nem biztos, hogy megértettem a parancsot, de rákeresek: ${text}`;
+                actionUrl = `https://www.google.com/search?q=${encodeURIComponent(text)}`;
             }
 
-            speak(reply);
+            speak(reply, actionUrl);
         }
 
-        // Beszéd generálása (TTS)
-        function speak(text) {
+        // Beszéd generálása + Opcionális ablaknyitás
+        function speak(text, urlToOpen = null) {
             synth.cancel();
             orb.className = 'aura-orb speaking';
-            statusText.innerText = 'AURA beszél...';
+            statusText.innerText = 'AURA beszél és cselekszik...';
 
             const utterance = new SpeechSynthesisUtterance(text);
             utterance.lang = 'hu-HU';
@@ -337,6 +337,12 @@
 
             utterance.onend = () => {
                 addMessage('AURA', text, 'aura');
+                
+                // Ha van megnyitandó oldal, akkor a beszédfolyamat végén megnyitja!
+                if (urlToOpen) {
+                    window.open(urlToOpen, '_blank');
+                }
+
                 if (autoRestart) {
                     try { recognition.start(); } catch(e){}
                 } else {
