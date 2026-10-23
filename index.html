@@ -178,12 +178,16 @@
     </div>
 
     <div class="chat-container" id="chat">
-        <div class="message aura">AURA: Szia! Készen állok. Kattints a gömbre egyszer, és beszélgessünk!</div>
+        <div class="message aura">AURA: Szia! Add meg a Gemini kulcsot a Beállításokban, és kezdhetjük!</div>
     </div>
 
     <div class="modal" id="settingsModal">
         <div class="modal-content">
             <h3>Beállítások</h3>
+            <div class="form-group">
+                <label for="apiKeyInput">Gemini API Kulcs:</label>
+                <input type="password" id="apiKeyInput" placeholder="Illeszd ide az AQ... kulcsot">
+            </div>
             <div class="form-group">
                 <label for="voiceSelect">Női Hang kiválasztása:</label>
                 <select id="voiceSelect"></select>
@@ -201,8 +205,6 @@
     </div>
 
     <script>
-        const GEMINI_API_KEY = "AQ.Ab8RN6K_A5dlfXROLw1bDU-vbYwJ3Y_9BwZf6zx_Y6G0LGrONQ";
-
         const orb = document.getElementById('orb');
         const statusText = document.getElementById('status');
         const chat = document.getElementById('chat');
@@ -212,6 +214,7 @@
         const voiceSelect = document.getElementById('voiceSelect');
         const pitchRange = document.getElementById('pitchRange');
         const rateRange = document.getElementById('rateRange');
+        const apiKeyInput = document.getElementById('apiKeyInput');
 
         let isListening = false;
         let recognition = null;
@@ -220,10 +223,13 @@
         let autoRestart = false;
         let chatHistory = [];
 
-        // Rendszer utasítás a Gemini személyiségéhez
-        const SYSTEM_INSTRUCTION = "Egy AURA nevű, melegszívű, figyelmes, 30-as éveiben járó magyar női asszisztens vagy. Beszélj közvetlenül, természetesen, emberien és röviden (1-3 mondatban), mintha egy jó baráttal beszélgetnél. Kerüld a száraz, robotikus listákat és a mesterséges megfogalmazásokat.";
+        // Betöltés a tárhelyről
+        if (localStorage.getItem('aura_gemini_key')) {
+            apiKeyInput.value = localStorage.getItem('aura_gemini_key');
+        }
 
-        // Web Speech API felismerő beállítása
+        const SYSTEM_INSTRUCTION = "Egy AURA nevű, melegszívű, figyelmes, 30-as éveiben járó magyar női asszisztens vagy. Beszélj közvetlenül, természetesen, emberien és röviden (1-3 mondatban), mintha egy jó baráttal beszélgetnél.";
+
         if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             recognition = new SpeechRecognition();
@@ -259,17 +265,13 @@
                     statusText.innerText = 'Kattints a gömbre a folytatáshoz...';
                 }
             };
-        } else {
-            statusText.innerText = 'A böngésződ nem támogatja a beszéd-felismerést.';
         }
 
-        // Hangok betöltése
         function loadVoices() {
             voices = synth.getVoices();
             voiceSelect.innerHTML = '';
             
             const huVoices = voices.filter(v => v.lang.includes('hu'));
-            
             if (huVoices.length > 0) {
                 huVoices.forEach(v => {
                     const opt = document.createElement('option');
@@ -295,7 +297,6 @@
         }
         loadVoices();
 
-        // Indítás gomb / Gömb kattintás
         orb.addEventListener('click', () => {
             if (!recognition) return;
             autoRestart = true;
@@ -308,8 +309,13 @@
             }
         });
 
-        // Gemini API hívás
         async function askGemini(userText) {
+            const apiKey = apiKeyInput.value.trim();
+            if (!apiKey) {
+                speak("Kérlek, add meg az API kulcsodat a Beállítások menüben!");
+                return;
+            }
+
             orb.className = 'aura-orb thinking';
             statusText.innerText = 'AURA gondolkodik...';
 
@@ -320,29 +326,37 @@
                 contents: chatHistory
             };
 
-            try {
-                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
+            const modelsToTry = ['gemini-2.0-flash', 'gemini-1.5-flash-latest', 'gemini-1.5-flash'];
+            let success = false;
 
-                const data = await response.json();
-                
-                if (data.candidates && data.candidates[0].content) {
-                    const replyText = data.candidates[0].content.parts[0].text;
-                    chatHistory.push({ role: "model", parts: [{ text: replyText }] });
-                    speak(replyText);
-                } else {
-                    speak("Ne haragudj, valamiért nem tudtam válaszolni. Megpróbálod újra?");
+            for (const model of modelsToTry) {
+                try {
+                    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        if (data.candidates && data.candidates[0].content) {
+                            const replyText = data.candidates[0].content.parts[0].text;
+                            chatHistory.push({ role: "model", parts: [{ text: replyText }] });
+                            speak(replyText);
+                            success = true;
+                            break;
+                        }
+                    }
+                } catch (err) {
+                    console.log(`Próbálkozás hiba (${model}):`, err);
                 }
-            } catch (error) {
-                console.error("Gemini hiba:", error);
-                speak("Sajnálom, egy kis hiba történt a csatlakozásban.");
+            }
+
+            if (!success) {
+                speak("Sajnálom, nem sikerült kapcsolódni. Ellenőrizd a beillesztett kulcsot a Beállításokban!");
             }
         }
 
-        // Beszéd generálása (TTS)
         function speak(text) {
             synth.cancel();
             orb.className = 'aura-orb speaking';
@@ -381,7 +395,10 @@
         }
 
         openSettings.onclick = () => modal.style.display = 'flex';
-        closeSettings.onclick = () => modal.style.display = 'none';
+        closeSettings.onclick = () => {
+            localStorage.setItem('aura_gemini_key', apiKeyInput.value.trim());
+            modal.style.display = 'none';
+        };
         window.onclick = (e) => { if (e.target === modal) modal.style.display = 'none'; };
     </script>
 </body>
