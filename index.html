@@ -3,7 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AURA - JARVIS Neural System</title>
+    <title>JARVIS // AURA Real AI</title>
+    <!-- Puter AI SDK betöltése - Kerüli a CORS hálózati blokkolást -->
+    <script src="https://js.puter.com/v2/"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -111,7 +113,7 @@
 
     <header>
         <div class="logo">JARVIS // AURA</div>
-        <button class="settings-btn" id="openSettings">Beállítások</button>
+        <button class="settings-btn" id="openSettings">Hang Beállítások</button>
     </header>
 
     <div class="visualizer-container">
@@ -120,7 +122,7 @@
     </div>
 
     <div class="chat-container" id="chat">
-        <div class="message aura">JARVIS: Minden rendszer online, Uram. A neurális hálózat készen áll a komplex feladatokra.</div>
+        <div class="message aura">JARVIS: Valódi AI hálózat csatlakoztatva. Készen állok a kötetlen beszélgetésre és az utasításokra, Uram!</div>
     </div>
 
     <div class="modal" id="settingsModal">
@@ -158,7 +160,9 @@
         let synth = window.speechSynthesis;
         let voices = [];
         let autoRestart = false;
-        let conversationMemory = [];
+
+        // Belső kontextus a JARVIS személyiséghez
+        const SYSTEM_PROMPT = "Te vagy JARVIS (vagy AURA), egy szuperintelligens, közvetlen, stílusos AI asszisztens. Válaszolj magyarul, természetes élőbeszéd hangnemben, értelmesen és szabatosan (lehetőleg 2-4 mondatban). Ha a felhasználó egy weboldal megnyitását kéri (pl. YouTube, Google, Facebook), a válaszod legvégére illeszd be pontosan ezt a jelölést: [OPEN: https://webcim.com].";
 
         if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -170,13 +174,13 @@
             recognition.onstart = () => {
                 isListening = true;
                 orb.className = 'aura-orb listening';
-                statusText.innerText = 'JARVIS hallgat, Uram...';
+                statusText.innerText = 'JARVIS hallgat téged...';
             };
 
             recognition.onresult = (event) => {
                 const text = event.results[0][0].transcript;
                 addMessage('Felhasználó', text, 'user');
-                processJarvisAI(text);
+                askRealAI(text);
             };
 
             recognition.onerror = (event) => {
@@ -224,57 +228,30 @@
             try { recognition.start(); } catch(e) {}
         });
 
-        // JARVIS fejlett lokális neurális és döntéshozó motor
-        function processJarvisAI(rawText) {
-            const text = rawText.toLowerCase().trim();
-            let reply = "";
-            let urlToOpen = null;
-
+        // Valódi AI hívás Puter.js-en keresztül
+        async function askRealAI(userText) {
             orb.className = 'aura-orb thinking';
-            statusText.innerText = 'JARVIS elemzi az adatokat...';
+            statusText.innerText = 'JARVIS gondolkodik...';
 
-            setTimeout(() => {
-                // Weboldal / Alkalmazás parancsok
-                if (text.includes('youtube') || text.includes('videó')) {
-                    reply = "Már indítom is a YouTube multimédiás felületét, Uram.";
-                    urlToOpen = "https://www.youtube.com";
-                } else if (text.includes('google') || text.includes('keress')) {
-                    const query = rawText.replace(/keress rá|keress meg|google|a|az/gi, '').trim();
-                    if (query.length > 2) {
-                        reply = `Keresés indítása a következő témában: ${query}.`;
-                        urlToOpen = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
-                    } else {
-                        reply = "Azonnal megnyitom a Google keresőt.";
-                        urlToOpen = "https://www.google.com";
-                    }
-                } else if (text.includes('facebook') || text.includes('közösségi')) {
-                    reply = "Kapcsolódás a közösségi hálózathoz.";
-                    urlToOpen = "https://www.facebook.com";
-                } else if (text.includes('spotify') || text.includes('zene')) {
-                    reply = "Zenei stream aktiválása a Spotify-on.";
-                    urlToOpen = "https://open.spotify.com";
-                } else if (text.includes('index') || text.includes('hírek')) {
-                    reply = "Legfrissebb globális és hazai hírek lekérése.";
-                    urlToOpen = "https://index.hu";
-                } 
-                // JARVIS Intelligens elemző és társalgási funkciók
-                else if (text.includes('hogy vagy') || text.includes('státusz')) {
-                    reply = "Minden diagnosztikai egység tökéletesen működik, Uram. A rendszerhőmérséklet optimális, a neurális háló készen áll.";
-                } else if (text.includes('ki vagy') || text.includes('neved')) {
-                    reply = "JARVIS vagyok, az Ön személyes mesterséges intelligencia asszisztense, aki a maximális hatékonyságra és irányításra lett tervezve.";
-                } else if (text.includes('időjárás')) {
-                    reply = "A külső szenzorok adatai helyett javaslom, hogy tekintsen ki az ablakon, de a légköri nyomás stabilnak tűnik.";
-                } else if (text.includes('köszönöm') || text.includes('köszi')) {
-                    reply = "Nagyon szívesen, Uram. Bármikor állok rendelkezésére.";
-                } else if (text.includes('segítség') || text.includes('mit tudsz')) {
-                    reply = "Képes vagyok irányítani a böngészőt, weboldalakat megnyitni, adatokra keresni, valamint logikai és asszisztensi támogatást nyújtani.";
-                } else {
-                    // Dinamikus, intelligens generált válasz komplexebb kérdésekre
-                    reply = `Elemeztem a felvetését: "${rawText}". A protokollok szerint ez a kérdés részletesebb kibontást igényel. Milyen irányba kíván továbbhaladni, Uram?`;
+            const prompt = `${SYSTEM_PROMPT}\n\nFelhasználó: ${userText}`;
+
+            try {
+                // A Puter.js ingyenesen meghívja a Gemini/LLM modellt CORS hibák nélkül
+                const response = await puter.ai.chat(prompt);
+                let responseText = response.toString();
+
+                let urlToOpen = null;
+                const match = responseText.match(/\[OPEN:\s*(.*?)\]/);
+                if (match) {
+                    urlToOpen = match[1].trim();
+                    responseText = responseText.replace(match[0], '').trim();
                 }
 
-                speak(reply, urlToOpen);
-            }, 600); // Kicsi szimulált "gondolkodási" idő a filmes élményért
+                speak(responseText, urlToOpen);
+            } catch (error) {
+                console.error("AI Hiba:", error);
+                speak("Sajnos pillanatnyilag megszakadt a kapcsolat a neurális hálózattal.");
+            }
         }
 
         function speak(text, urlToOpen = null) {
@@ -302,7 +279,7 @@
                     try { recognition.start(); } catch(e){}
                 } else {
                     orb.className = 'aura-orb';
-                    statusText.innerText = 'JARVIS figyel, Uram...';
+                    statusText.innerText = 'JARVIS figyel téged...';
                 }
             };
 
