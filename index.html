@@ -3,13 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AURA - Személyes Asszisztens</title>
-    <style>
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
+    <title>AURA - Jarvis AI Asszisztens</title>
+    <!-- Google Gen AI SDK betöltése -->
+    <script type="importmap">
+      {
+        "imports": {
+          "@google/genai": "https://esm.run/@google/genai"
         }
+      }
+    </script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: radial-gradient(circle, #1a1e29 0%, #0a0c10 100%);
@@ -45,10 +49,7 @@
             cursor: pointer;
             transition: all 0.3s ease;
         }
-        .settings-btn:hover {
-            background: rgba(255,255,255,0.2);
-            border-color: #00f2fe;
-        }
+        .settings-btn:hover { background: rgba(255,255,255,0.2); border-color: #00f2fe; }
         .visualizer-container {
             display: flex;
             flex-direction: column;
@@ -66,36 +67,14 @@
             cursor: pointer;
             transition: all 0.3s ease;
         }
-        .aura-orb.listening {
-            animation: pulse-fast 1.2s infinite ease-in-out;
-            box-shadow: 0 0 40px rgba(0, 242, 254, 1), 0 0 80px rgba(79, 172, 254, 0.8);
-        }
-        .aura-orb.speaking {
-            animation: pulse-speaking 0.8s infinite ease-in-out;
-            background: radial-gradient(circle, #ff0844 0%, #ffb199 100%);
-            box-shadow: 0 0 40px rgba(255, 8, 68, 0.8), 0 0 80px rgba(255, 177, 153, 0.5);
-        }
-        @keyframes pulse {
-            0% { transform: scale(0.98); opacity: 0.8; }
-            50% { transform: scale(1.05); opacity: 1; }
-            100% { transform: scale(0.98); opacity: 0.8; }
-        }
-        @keyframes pulse-fast {
-            0% { transform: scale(0.95); }
-            50% { transform: scale(1.1); }
-            100% { transform: scale(0.95); }
-        }
-        @keyframes pulse-speaking {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.15); }
-            100% { transform: scale(1); }
-        }
-        .status-text {
-            margin-top: 30px;
-            font-size: 1.2rem;
-            color: #a0aab0;
-            text-align: center;
-        }
+        .aura-orb.listening { animation: pulse-fast 1.2s infinite ease-in-out; box-shadow: 0 0 40px rgba(0, 242, 254, 1), 0 0 80px rgba(79, 172, 254, 0.8); }
+        .aura-orb.thinking { animation: pulse-thinking 1s infinite ease-in-out; background: radial-gradient(circle, #a855f7 0%, #6366f1 100%); box-shadow: 0 0 40px rgba(168, 85, 247, 0.8), 0 0 80px rgba(99, 102, 241, 0.5); }
+        .aura-orb.speaking { animation: pulse-speaking 0.8s infinite ease-in-out; background: radial-gradient(circle, #ff0844 0%, #ffb199 100%); box-shadow: 0 0 40px rgba(255, 8, 68, 0.8), 0 0 80px rgba(255, 177, 153, 0.5); }
+        @keyframes pulse { 0% { transform: scale(0.98); opacity: 0.8; } 50% { transform: scale(1.05); opacity: 1; } 100% { transform: scale(0.98); opacity: 0.8; } }
+        @keyframes pulse-fast { 0% { transform: scale(0.95); } 50% { transform: scale(1.1); } 100% { transform: scale(0.95); } }
+        @keyframes pulse-thinking { 0% { transform: scale(1); opacity: 0.6; } 50% { transform: scale(1.08); opacity: 1; } 100% { transform: scale(1); opacity: 0.6; } }
+        @keyframes pulse-speaking { 0% { transform: scale(1); } 50% { transform: scale(1.15); } 100% { transform: scale(1); } }
+        .status-text { margin-top: 30px; font-size: 1.2rem; color: #a0aab0; text-align: center; }
         .chat-container {
             width: 100%;
             max-width: 600px;
@@ -107,11 +86,7 @@
             margin-bottom: 20px;
             border: 1px solid rgba(255, 255, 255, 0.05);
         }
-        .message {
-            margin-bottom: 8px;
-            font-size: 0.95rem;
-            line-height: 1.4;
-        }
+        .message { margin-bottom: 8px; font-size: 0.95rem; line-height: 1.4; }
         .message.user { color: #4facfe; }
         .message.aura { color: #00f2fe; font-weight: 500; }
         .modal {
@@ -135,31 +110,16 @@
         .form-group { margin-bottom: 15px; }
         .form-group label { display: block; margin-bottom: 5px; font-size: 0.9rem; color: #a0aab0; }
         .form-group select, .form-group input {
-            width: 100%;
-            padding: 8px;
-            background: #0d1117;
-            border: 1px solid rgba(255,255,255,0.2);
-            color: #fff;
-            border-radius: 5px;
+            width: 100%; padding: 8px; background: #0d1117; border: 1px solid rgba(255,255,255,0.2); color: #fff; border-radius: 5px;
         }
-        .close-btn {
-            background: #00f2fe;
-            color: #000;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 5px;
-            font-weight: bold;
-            cursor: pointer;
-            width: 100%;
-            margin-top: 10px;
-        }
+        .close-btn { background: #00f2fe; color: #000; border: none; padding: 10px 20px; border-radius: 5px; font-weight: bold; cursor: pointer; width: 100%; margin-top: 10px; }
     </style>
 </head>
 <body>
 
     <header>
         <div class="logo">AURA</div>
-        <button class="settings-btn" id="openSettings">Hang & Beállítások</button>
+        <button class="settings-btn" id="openSettings">Beállítások & API Kulcs</button>
     </header>
 
     <div class="visualizer-container">
@@ -168,29 +128,35 @@
     </div>
 
     <div class="chat-container" id="chat">
-        <div class="message aura">AURA: Szia! Készen állok. Mondd, hogy "Nyisd meg a YouTube-ot"!</div>
+        <div class="message aura">AURA: Üdvözlöm! Jarvis-mód aktív. Add meg a kulcsot a Beállításokban, és kezdhetjük.</div>
     </div>
 
     <div class="modal" id="settingsModal">
         <div class="modal-content">
-            <h3>Beállítások</h3>
+            <h3>Rendszerbeállítások</h3>
+            <div class="form-group">
+                <label for="apiKeyInput">Gemini API Kulcs:</label>
+                <input type="password" id="apiKeyInput" placeholder="Illeszd be a kulcsot">
+            </div>
             <div class="form-group">
                 <label for="voiceSelect">Női Hang kiválasztása:</label>
                 <select id="voiceSelect"></select>
             </div>
             <div class="form-group">
-                <label for="pitchRange">Hangmagasság (Lágyítás):</label>
+                <label for="pitchRange">Hangmagasság:</label>
                 <input type="range" id="pitchRange" min="0.8" max="1.4" step="0.05" value="1.15">
             </div>
             <div class="form-group">
-                <label for="rateRange">Beszédsebesség (Természetesség):</label>
+                <label for="rateRange">Beszédsebesség:</label>
                 <input type="range" id="rateRange" min="0.7" max="1.2" step="0.05" value="0.95">
             </div>
-            <button class="close-btn" id="closeSettings">Mentés és Bezárás</button>
+            <button class="close-btn" id="closeSettings">Mentés és Indítás</button>
         </div>
     </div>
 
-    <script>
+    <script type="module">
+        import { GoogleGenAI } from "@google/genai";
+
         const orb = document.getElementById('orb');
         const statusText = document.getElementById('status');
         const chat = document.getElementById('chat');
@@ -200,13 +166,37 @@
         const voiceSelect = document.getElementById('voiceSelect');
         const pitchRange = document.getElementById('pitchRange');
         const rateRange = document.getElementById('rateRange');
+        const apiKeyInput = document.getElementById('apiKeyInput');
 
         let isListening = false;
         let recognition = null;
         let synth = window.speechSynthesis;
         let voices = [];
         let autoRestart = false;
+        let chatSession = null;
 
+        // API kulcs betöltése tárolóból
+        if (localStorage.getItem('aura_gemini_key')) {
+            apiKeyInput.value = localStorage.getItem('aura_gemini_key');
+            initGemini(apiKeyInput.value);
+        }
+
+        function initGemini(key) {
+            try {
+                const ai = new GoogleGenAI({ apiKey: key });
+                // Chat session inicializálása a Jarvis személyiséggel
+                chatSession = ai.chats.create({
+                    model: 'gemini-2.0-flash',
+                    config: {
+                        systemInstruction: "Te vagy AURA, egy rendkívül intelligens, Jarvis-stílusú fejlett mesterséges intelligencia asszisztens. Válaszolj magyarul, professzionálisan, éleslátóan, tömören és elegánsan. Ha a felhasználó egy weboldal vagy alkalmazás (pl. YouTube, Google, Facebook) megnyitását kéri, a válaszodban a szöveg végére tedd be pontosan ezt a kódot: [OPEN: URL], ahol az URL a webcím."
+                    }
+                });
+            } catch (e) {
+                console.error("Gemini hiba:", e);
+            }
+        }
+
+        // Web Speech API
         if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             recognition = new SpeechRecognition();
@@ -217,17 +207,16 @@
             recognition.onstart = () => {
                 isListening = true;
                 orb.className = 'aura-orb listening';
-                statusText.innerText = 'AURA figyel téged... Beszélj hozzá!';
+                statusText.innerText = 'AURA hallgat...';
             };
 
             recognition.onresult = (event) => {
                 const text = event.results[0][0].transcript;
-                addMessage('Tudatos', text, 'user');
-                handleCommands(text);
+                addMessage('Felhasználó', text, 'user');
+                askAura(text);
             };
 
             recognition.onerror = (event) => {
-                console.log('Felismerési hiba:', event.error);
                 if (autoRestart && event.error !== 'not-allowed') {
                     setTimeout(() => { try{ recognition.start(); }catch(e){} }, 500);
                 }
@@ -235,42 +224,28 @@
 
             recognition.onend = () => {
                 isListening = false;
-                if (autoRestart && !synth.speaking) {
+                if (autoRestart && !synth.speaking && !orb.classList.contains('thinking')) {
                     try { recognition.start(); } catch(e){}
-                } else if (!synth.speaking) {
+                } else if (!synth.speaking && !orb.classList.contains('thinking')) {
                     orb.className = 'aura-orb';
                     statusText.innerText = 'Kattints a gömbre a folytatáshoz...';
                 }
             };
-        } else {
-            statusText.innerText = 'A böngésződ nem támogatja a beszéd-felismerést.';
         }
 
         function loadVoices() {
             voices = synth.getVoices();
             voiceSelect.innerHTML = '';
-            
-            const huVoices = voices.filter(v => v.lang.includes('hu'));
-            if (huVoices.length > 0) {
-                huVoices.forEach(v => {
-                    const opt = document.createElement('option');
-                    opt.value = v.name;
-                    opt.innerText = `${v.name} (${v.lang})`;
-                    if (v.name.includes('Noemi') || v.name.includes('Noémi') || v.name.includes('Google')) {
-                        opt.selected = true;
-                    }
-                    voiceSelect.appendChild(opt);
-                });
-            } else {
-                voices.forEach(v => {
-                    const opt = document.createElement('option');
-                    opt.value = v.name;
-                    opt.innerText = `${v.name} (${v.lang})`;
-                    voiceSelect.appendChild(opt);
-                });
-            }
+            voices.forEach(v => {
+                const opt = document.createElement('option');
+                opt.value = v.name;
+                opt.innerText = `${v.name} (${v.lang})`;
+                if (v.name.includes('Noemi') || v.name.includes('Noémi') || v.name.includes('Google')) {
+                    opt.selected = true;
+                }
+                voiceSelect.appendChild(opt);
+            });
         }
-
         if (speechSynthesis.onvoiceschanged !== undefined) {
             speechSynthesis.onvoiceschanged = loadVoices;
         }
@@ -280,49 +255,41 @@
             if (!recognition) return;
             autoRestart = true;
             if (synth.speaking) synth.cancel();
-
-            try {
-                recognition.start();
-            } catch(e) {
-                console.log('Már fut a felismerés...');
-            }
+            try { recognition.start(); } catch(e) {}
         });
 
-        // Parancsértelmező és végrehajtó motor
-        function handleCommands(text) {
-            const lower = text.toLowerCase();
-            let reply = "";
-            let actionUrl = null;
-
-            if (lower.includes('youtube')) {
-                reply = "Már nyitom is neked a YouTube-ot!";
-                actionUrl = "https://www.youtube.com";
-            } else if (lower.includes('google')) {
-                reply = "Megnyitom a Google-t.";
-                actionUrl = "https://www.google.com";
-            } else if (lower.includes('facebook')) {
-                reply = "Nyitom a Facebookot.";
-                actionUrl = "https://www.facebook.com";
-            } else if (lower.includes('index')) {
-                reply = "Már hozom a híreket az Indexen.";
-                actionUrl = "https://index.hu";
-            } else if (lower.includes('szia') || lower.includes('üdv')) {
-                reply = "Szia! Milyen oldalt vagy videót szeretnél, hogy megnyissak neked?";
-            } else if (lower.includes('hogy vagy')) {
-                reply = "Kiválóan! Készen állok, hogy irányítsam a böngésződet.";
-            } else {
-                reply = `Nem biztos, hogy megértettem a parancsot, de rákeresek: ${text}`;
-                actionUrl = `https://www.google.com/search?q=${encodeURIComponent(text)}`;
+        async function askAura(userText) {
+            if (!chatSession) {
+                speak("Kérlek, add meg érvényes API kulcsodat a Beállításokban!");
+                return;
             }
 
-            speak(reply, actionUrl);
+            orb.className = 'aura-orb thinking';
+            statusText.innerText = 'AURA gondolkodik...';
+
+            try {
+                const result = await chatSession.sendMessage({ message: userText });
+                let responseText = result.text;
+
+                let urlToOpen = null;
+                // Ellenőrizzük, hogy kért-e oldalmegnyitást a modell
+                const openMatch = responseText.match(/\[OPEN:\s*(.*?)\]/);
+                if (openMatch) {
+                    urlToOpen = openMatch[1].trim();
+                    responseText = responseText.replace(openMatch[0], '').trim();
+                }
+
+                speak(responseText, urlToOpen);
+            } catch (error) {
+                console.error(error);
+                speak("Kommunikációs hiba lépett fel a neurális hálózattal.");
+            }
         }
 
-        // Beszéd generálása + Opcionális ablaknyitás
         function speak(text, urlToOpen = null) {
             synth.cancel();
             orb.className = 'aura-orb speaking';
-            statusText.innerText = 'AURA beszél és cselekszik...';
+            statusText.innerText = 'AURA beszél...';
 
             const utterance = new SpeechSynthesisUtterance(text);
             utterance.lang = 'hu-HU';
@@ -331,14 +298,11 @@
 
             const selectedVoiceName = voiceSelect.value;
             const selectedVoice = voices.find(v => v.name === selectedVoiceName);
-            if (selectedVoice) {
-                utterance.voice = selectedVoice;
-            }
+            if (selectedVoice) utterance.voice = selectedVoice;
 
             utterance.onend = () => {
                 addMessage('AURA', text, 'aura');
-                
-                // Ha van megnyitandó oldal, akkor a beszédfolyamat végén megnyitja!
+
                 if (urlToOpen) {
                     window.open(urlToOpen, '_blank');
                 }
@@ -347,7 +311,7 @@
                     try { recognition.start(); } catch(e){}
                 } else {
                     orb.className = 'aura-orb';
-                    statusText.innerText = 'AURA figyel téged...';
+                    statusText.innerText = 'AURA figyel...';
                 }
             };
 
@@ -363,7 +327,12 @@
         }
 
         openSettings.onclick = () => modal.style.display = 'flex';
-        closeSettings.onclick = () => modal.style.display = 'none';
+        closeSettings.onclick = () => {
+            const key = apiKeyInput.value.trim();
+            localStorage.setItem('aura_gemini_key', key);
+            initGemini(key);
+            modal.style.display = 'none';
+        };
         window.onclick = (e) => { if (e.target === modal) modal.style.display = 'none'; };
     </script>
 </body>
