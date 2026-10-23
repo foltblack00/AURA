@@ -4,14 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AURA - Jarvis AI Asszisztens</title>
-    <!-- Google Gen AI SDK betöltése -->
-    <script type="importmap">
-      {
-        "imports": {
-          "@google/genai": "https://esm.run/@google/genai"
-        }
-      }
-    </script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -128,18 +120,18 @@
     </div>
 
     <div class="chat-container" id="chat">
-        <div class="message aura">AURA: Üdvözlöm! Jarvis-mód aktív. Add meg a kulcsot a Beállításokban, és kezdhetjük.</div>
+        <div class="message aura">AURA: Üdvözlöm! Rendelkezésre állok.</div>
     </div>
 
     <div class="modal" id="settingsModal">
         <div class="modal-content">
             <h3>Rendszerbeállítások</h3>
             <div class="form-group">
-                <label for="apiKeyInput">Gemini API Kulcs:</label>
+                <label for="apiKeyInput">Gemini API Kulcs (AIzaSy...):</label>
                 <input type="password" id="apiKeyInput" placeholder="Illeszd be a kulcsot">
             </div>
             <div class="form-group">
-                <label for="voiceSelect">Női Hang kiválasztása:</label>
+                <label for="voiceSelect">Hang kiválasztása:</label>
                 <select id="voiceSelect"></select>
             </div>
             <div class="form-group">
@@ -154,9 +146,7 @@
         </div>
     </div>
 
-    <script type="module">
-        import { GoogleGenAI } from "@google/genai";
-
+    <script>
         const orb = document.getElementById('orb');
         const statusText = document.getElementById('status');
         const chat = document.getElementById('chat');
@@ -173,30 +163,14 @@
         let synth = window.speechSynthesis;
         let voices = [];
         let autoRestart = false;
-        let chatSession = null;
+        let history = [];
 
-        // API kulcs betöltése tárolóból
         if (localStorage.getItem('aura_gemini_key')) {
             apiKeyInput.value = localStorage.getItem('aura_gemini_key');
-            initGemini(apiKeyInput.value);
         }
 
-        function initGemini(key) {
-            try {
-                const ai = new GoogleGenAI({ apiKey: key });
-                // Chat session inicializálása a Jarvis személyiséggel
-                chatSession = ai.chats.create({
-                    model: 'gemini-2.0-flash',
-                    config: {
-                        systemInstruction: "Te vagy AURA, egy rendkívül intelligens, Jarvis-stílusú fejlett mesterséges intelligencia asszisztens. Válaszolj magyarul, professzionálisan, éleslátóan, tömören és elegánsan. Ha a felhasználó egy weboldal vagy alkalmazás (pl. YouTube, Google, Facebook) megnyitását kéri, a válaszodban a szöveg végére tedd be pontosan ezt a kódot: [OPEN: URL], ahol az URL a webcím."
-                    }
-                });
-            } catch (e) {
-                console.error("Gemini hiba:", e);
-            }
-        }
+        const SYSTEM_PROMPT = "Te vagy AURA, egy Jarvis-szintű, szuperintelligens mesterséges intelligencia asszisztens. Válaszolj magyarul, közvetlenül, intelligensen, röviden (maximum 2-3 mondatban). Ha a felhasználó egy weboldal vagy alkalmazás megnyitását kéri (pl. YouTube, Google, Facebook), a válaszod legvégére fűzd hozzá pontosan ezt a tage-et: [OPEN: https://webcim.com]. PÉLDA: 'Már nyitom is a YouTube-ot. [OPEN: https://www.youtube.com]'";
 
-        // Web Speech API
         if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             recognition = new SpeechRecognition();
@@ -207,7 +181,7 @@
             recognition.onstart = () => {
                 isListening = true;
                 orb.className = 'aura-orb listening';
-                statusText.innerText = 'AURA hallgat...';
+                statusText.innerText = 'AURA hallgat téged...';
             };
 
             recognition.onresult = (event) => {
@@ -217,8 +191,9 @@
             };
 
             recognition.onerror = (event) => {
+                console.error('Speech error:', event.error);
                 if (autoRestart && event.error !== 'not-allowed') {
-                    setTimeout(() => { try{ recognition.start(); }catch(e){} }, 500);
+                    setTimeout(() => { try { recognition.start(); } catch(e){} }, 500);
                 }
             };
 
@@ -240,7 +215,7 @@
                 const opt = document.createElement('option');
                 opt.value = v.name;
                 opt.innerText = `${v.name} (${v.lang})`;
-                if (v.name.includes('Noemi') || v.name.includes('Noémi') || v.name.includes('Google')) {
+                if (v.lang.includes('hu') || v.name.includes('Noemi') || v.name.includes('Google')) {
                     opt.selected = true;
                 }
                 voiceSelect.appendChild(opt);
@@ -259,30 +234,66 @@
         });
 
         async function askAura(userText) {
-            if (!chatSession) {
-                speak("Kérlek, add meg érvényes API kulcsodat a Beállításokban!");
+            const apiKey = apiKeyInput.value.trim();
+            if (!apiKey) {
+                speak("Nyisd meg a beállításokat és illeszd be az API kulcsodat!");
                 return;
             }
 
             orb.className = 'aura-orb thinking';
             statusText.innerText = 'AURA gondolkodik...';
 
-            try {
-                const result = await chatSession.sendMessage({ message: userText });
-                let responseText = result.text;
+            history.push({ role: "user", parts: [{ text: userText }] });
+
+            const payload = {
+                systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+                contents: history
+            };
+
+            // Biztosított végpontok sorrendje
+            const endpoints = [
+                `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+                `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`
+            ];
+
+            let responseText = null;
+
+            for (const url of endpoints) {
+                try {
+                    const res = await fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (data.candidates && data.candidates[0].content) {
+                            responseText = data.candidates[0].content.parts[0].text;
+                            break;
+                        }
+                    } else {
+                        const errData = await res.json();
+                        console.error("API Hiba válasz:", errData);
+                    }
+                } catch (e) {
+                    console.error("Hálózati hiba:", e);
+                }
+            }
+
+            if (responseText) {
+                history.push({ role: "model", parts: [{ text: responseText }] });
 
                 let urlToOpen = null;
-                // Ellenőrizzük, hogy kért-e oldalmegnyitást a modell
-                const openMatch = responseText.match(/\[OPEN:\s*(.*?)\]/);
-                if (openMatch) {
-                    urlToOpen = openMatch[1].trim();
-                    responseText = responseText.replace(openMatch[0], '').trim();
+                const match = responseText.match(/\[OPEN:\s*(.*?)\]/);
+                if (match) {
+                    urlToOpen = match[1].trim();
+                    responseText = responseText.replace(match[0], '').trim();
                 }
 
                 speak(responseText, urlToOpen);
-            } catch (error) {
-                console.error(error);
-                speak("Kommunikációs hiba lépett fel a neurális hálózattal.");
+            } else {
+                speak("Nem tudtam kapcsolódni az AI szerverhez. Ellenőrizd a kulcsodat a beállításokban!");
             }
         }
 
@@ -311,7 +322,7 @@
                     try { recognition.start(); } catch(e){}
                 } else {
                     orb.className = 'aura-orb';
-                    statusText.innerText = 'AURA figyel...';
+                    statusText.innerText = 'AURA figyel téged...';
                 }
             };
 
@@ -330,7 +341,6 @@
         closeSettings.onclick = () => {
             const key = apiKeyInput.value.trim();
             localStorage.setItem('aura_gemini_key', key);
-            initGemini(key);
             modal.style.display = 'none';
         };
         window.onclick = (e) => { if (e.target === modal) modal.style.display = 'none'; };
