@@ -120,7 +120,7 @@
     </div>
 
     <div class="chat-container" id="chat">
-        <div class="message aura">AURA: Üdvözlöm! Rendelkezésre állok.</div>
+        <div class="message aura">AURA: Üdvözlöm! Rendszer online.</div>
     </div>
 
     <div class="modal" id="settingsModal">
@@ -169,7 +169,7 @@
             apiKeyInput.value = localStorage.getItem('aura_gemini_key');
         }
 
-        const SYSTEM_PROMPT = "Te vagy AURA, egy Jarvis-szintű, szuperintelligens mesterséges intelligencia asszisztens. Válaszolj magyarul, közvetlenül, intelligensen, röviden (maximum 2-3 mondatban). Ha a felhasználó egy weboldal vagy alkalmazás megnyitását kéri (pl. YouTube, Google, Facebook), a válaszod legvégére fűzd hozzá pontosan ezt a tage-et: [OPEN: https://webcim.com]. PÉLDA: 'Már nyitom is a YouTube-ot. [OPEN: https://www.youtube.com]'";
+        const SYSTEM_PROMPT = "Te vagy AURA, egy Jarvis-szintű, szuperintelligens mesterséges intelligencia asszisztens. Válaszolj magyarul, közvetlenül, intelligensen, röviden (maximum 2-3 mondatban). Ha a felhasználó egy weboldal vagy alkalmazás megnyitását kéri (pl. YouTube, Google, Facebook), a válaszod legvégére fűzd hozzá pontosan ezt a tage-et: [OPEN: https://webcim.com].";
 
         if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -215,7 +215,7 @@
                 const opt = document.createElement('option');
                 opt.value = v.name;
                 opt.innerText = `${v.name} (${v.lang})`;
-                if (v.lang.includes('hu') || v.name.includes('Noemi') || v.name.includes('Google')) {
+                if (v.lang.includes('hu') || v.name.includes('Noemi') || v.name.includes('Noémi') || v.name.includes('Google')) {
                     opt.selected = true;
                 }
                 voiceSelect.appendChild(opt);
@@ -236,7 +236,7 @@
         async function askAura(userText) {
             const apiKey = apiKeyInput.value.trim();
             if (!apiKey) {
-                speak("Nyisd meg a beállításokat és illeszd be az API kulcsodat!");
+                speak("Nyisd meg a beállításokat és add meg az API kulcsodat!");
                 return;
             }
 
@@ -250,35 +250,40 @@
                 contents: history
             };
 
-            // Biztosított végpontok sorrendje
-            const endpoints = [
-                `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-                `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`
-            ];
+            // CORS proxy használata a blokkolások elkerülésére
+            const targetUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+            const proxyUrl = `https://api.allorigins.win/raw?url=` + encodeURIComponent(targetUrl);
 
             let responseText = null;
 
-            for (const url of endpoints) {
-                try {
-                    const res = await fetch(url, {
+            try {
+                const res = await fetch(targetUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.candidates && data.candidates[0].content) {
+                        responseText = data.candidates[0].content.parts[0].text;
+                    }
+                } else {
+                    // Ha a közvetlen hívás elbukik, megpróbáljuk a proxyn keresztül
+                    const proxyRes = await fetch(proxyUrl, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(payload)
                     });
-
-                    if (res.ok) {
-                        const data = await res.json();
+                    if (proxyRes.ok) {
+                        const data = await proxyRes.json();
                         if (data.candidates && data.candidates[0].content) {
                             responseText = data.candidates[0].content.parts[0].text;
-                            break;
                         }
-                    } else {
-                        const errData = await res.json();
-                        console.error("API Hiba válasz:", errData);
                     }
-                } catch (e) {
-                    console.error("Hálózati hiba:", e);
                 }
+            } catch (e) {
+                console.error("Hálózati hiba:", e);
             }
 
             if (responseText) {
@@ -293,7 +298,7 @@
 
                 speak(responseText, urlToOpen);
             } else {
-                speak("Nem tudtam kapcsolódni az AI szerverhez. Ellenőrizd a kulcsodat a beállításokban!");
+                speak("Nem sikerült kapcsolódni a szerverrel. Ellenőrizd a kulcsodat!");
             }
         }
 
